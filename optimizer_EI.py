@@ -173,6 +173,7 @@ def optimizer_DE(problem, nobj, ncon, bounds, recordFlag, pop_test, F, CR, NP, i
     # for test
     # pop_x = np.loadtxt('pop.csv', delimiter=',')
 
+
     XVmin = np.repeat(np.atleast_2d(min_b), NP, axis=0)
     XVmax = np.repeat(np.atleast_2d(max_b), NP, axis=0)
 

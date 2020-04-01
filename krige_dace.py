@@ -57,6 +57,7 @@ class krige_dace:
         ub = np.atleast_2d(max_x).T
         theta0 = np.ones((1, nx))
 
+        '''
         # just for this experiment
         lb = []
         ub = []
@@ -65,7 +66,7 @@ class krige_dace:
             ub.append(1000)
         lb = np.atleast_2d(lb).T
         ub = np.atleast_2d(ub).T
-
+        '''
 
         self.fit(self.poly0, self.corr_gau, theta0, lb, ub)
 

@@ -1442,7 +1442,6 @@ def main_bi_mo(seed_index, target_problem, enable_crossvalidation, method_select
 
     complete_u = []
     for xu in train_x_u:
-        '''
         matching_x, train_x_l, train_y_l = search_for_matchingx(xu,
                                                                 lower_interation,
                                                                 number_of_initial_samples,
@@ -1455,8 +1454,8 @@ def main_bi_mo(seed_index, target_problem, enable_crossvalidation, method_select
                                                                 enable_crossvalidation,
                                                                 method_selection)
 
-        '''
-        matching_x, train_x_l, train_y_l = ea_seach_for_matchingx(xu, target_problem_l)
+
+        # matching_x, train_x_l, train_y_l = ea_seach_for_matchingx(xu, target_problem_l)
         # test stop there
         x_evaluated_l = save_for_count_evaluation(xu, train_x_l,'lower', x_evaluated_l)
         y_evaluated_l = np.vstack((y_evaluated_l, train_y_l))
@@ -1624,7 +1623,7 @@ if __name__ == "__main__":
                 target_problem =BO_target_problems [j: j+2]
                 args.append((seed, target_problem, False, method, method))
     # main_mo_c(1, MO_target_problems[0], False, 'eim', 'eim')
-    i = 14
+    i = 0
     main_bi_mo(0, BO_target_problems[i:i+2], False, 'eim', 'eim')
     # problem_test()
 
