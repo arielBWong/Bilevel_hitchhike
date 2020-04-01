@@ -1457,7 +1457,7 @@ def main_bi_mo(seed_index, target_problem, enable_crossvalidation, method_select
 
         '''
         matching_x, train_x_l, train_y_l = ea_seach_for_matchingx(xu, target_problem_l)
-
+        # test stop there
         x_evaluated_l = save_for_count_evaluation(xu, train_x_l,'lower', x_evaluated_l)
         y_evaluated_l = np.vstack((y_evaluated_l, train_y_l))
         complete_u = np.append(complete_u, matching_x)
@@ -1624,7 +1624,7 @@ if __name__ == "__main__":
                 target_problem =BO_target_problems [j: j+2]
                 args.append((seed, target_problem, False, method, method))
     # main_mo_c(1, MO_target_problems[0], False, 'eim', 'eim')
-    i = 6
+    i = 14
     main_bi_mo(0, BO_target_problems[i:i+2], False, 'eim', 'eim')
     # problem_test()
 

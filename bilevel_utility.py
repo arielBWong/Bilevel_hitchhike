@@ -233,16 +233,17 @@ def ea_seach_for_matchingx(xu, target_problem_l):
                            None,
                            0.1,
                            0.9,
-                           20,
-                           20,
+                           100,
+                           100,
                            **paras)
 
-
-
+    np.set_printoptions(precision=2)
+    print(pop_x[0])
+    print(pop_f[0])
     return pop_x[0], None, None
 
 def bi_level_compensate(level, combine_value, x, activate):
-    if activate:
+    if not activate:
         return x
     else:
         x = check_array(x)
@@ -251,10 +252,10 @@ def bi_level_compensate(level, combine_value, x, activate):
         # extend combine values
         combine_value = np.repeat(combine_value, n, axis=0)
         if level=='lower':
-            x = np.vstack((combine_value, x))
+            x = np.hstack((combine_value, x))
             return x
         if level == 'upper':
-            x = np.vstack((x, combine_value))
+            x = np.hstack((x, combine_value))
             return x
 
 
