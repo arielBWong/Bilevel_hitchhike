@@ -20,10 +20,13 @@ def optimizer(problem, nobj, ncon, bounds, recordFlag, pop_test, mut, crossp, po
 
 
 
-    # if len(kwargs) != 0:
-        # print(kwargs['add_info'])
-        # guide_x = kwargs['add_info']
-    bilevel_fix = kwargs['callback']
+    if 'add_info' in kwargs.keys():
+        print(kwargs['add_info'])
+        guide_x = kwargs['add_info']
+    if 'callback' in kwargs.keys():
+        bilevel_fix = kwargs['callback']
+        level = kwargs['level']
+        compensate_x = kwargs['other_x']
 
 
     all_cv = np.zeros((2 * popsize, 1))
@@ -45,9 +48,9 @@ def optimizer(problem, nobj, ncon, bounds, recordFlag, pop_test, mut, crossp, po
     archive_f = pop_f
 
     # print(pop)
-    # if len(kwargs) != 0:
-    #    pop_x[0, :] = guide_x
-    #     pop[0, :] = (guide_x - min_b)/diff
+    if 'add_info' in kwargs.keys():
+        pop_x[0, :] = guide_x
+        pop[0, :] = (guide_x - min_b)/diff
 
     if pop_test is not None:
         pop = pop_test
@@ -55,16 +58,18 @@ def optimizer(problem, nobj, ncon, bounds, recordFlag, pop_test, mut, crossp, po
 
 
     if ncon != 0:
-        pop_x_fix = bilevel_fix(pop_x)
-        pop_f, pop_g = problem.evaluate(pop_x_fix, return_values_of=["F", "G"], **kwargs)
+        if 'callback' in kwargs.keys():
+            pop_x = bilevel_fix(pop_x, level, compensate_x)
+        pop_f, pop_g = problem.evaluate(pop_x, return_values_of=["F", "G"], **kwargs)
         tmp = pop_g
         tmp[tmp <= 0] = 0
         pop_cv = tmp.sum(axis=1)
 
     if ncon == 0:
         # np.savetxt('test_x.csv', pop_x, delimiter=',')
-        pop_x_fix = bilevel_fix(pop_x)
-        pop_f = problem.evaluate(pop_x_fix, return_values_of=["F"], **kwargs)
+        if 'callback' in kwargs.keys():
+            pop_x = bilevel_fix(pop_x, level, compensate_x)
+        pop_f = problem.evaluate(pop_x, return_values_of=["F"], **kwargs)
 
 
     # Over the generations
@@ -78,11 +83,13 @@ def optimizer(problem, nobj, ncon, bounds, recordFlag, pop_test, mut, crossp, po
         start = time.time()
         trial_denorm = min_b + child_x * diff
         if ncon != 0:
-            trial_denorm_fix = bilevel_fix(trial_denorm)
-            child_f, child_g = problem.evaluate(trial_denorm_fix, return_values_of=["F", "G"], **kwargs)
+            if 'callback' in kwargs.keys():
+                trial_denorm = bilevel_fix(trial_denorm, level, compensate_x)
+            child_f, child_g = problem.evaluate(trial_denorm, return_values_of=["F", "G"], **kwargs)
         if ncon == 0:
-            trial_denorm_fix = bilevel_fix(trial_denorm)
-            child_f = problem.evaluate(trial_denorm_fix, return_values_of=["F"], **kwargs)
+            if 'callback' in kwargs.keys():
+                trial_denorm = bilevel_fix(trial_denorm, level, compensate_x)
+            child_f = problem.evaluate(trial_denorm, return_values_of=["F"], **kwargs)
         end = time.time()
         # print(' evaluation time used %.4f' % (end - start))
 

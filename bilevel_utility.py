@@ -14,7 +14,7 @@ from cross_val_hyperp import cross_val_krg
 from joblib import dump, load
 import time
 from surrogate_problems import branin, GPc, Gomez3, Mystery, Reverse_Mystery, SHCBc, HS100, Haupt_schewefel, \
-                               MO_linearTest, single_krg_optim, WFG, iDTLZ, DTLZs, SMD, EI
+                               MO_linearTest, single_krg_optim, WFG, iDTLZ, DTLZs, SMD, EI, Surrogate_test
 
 import os
 import copy
@@ -68,6 +68,7 @@ def init_xy(number_of_initial_samples, target_problem, seed, **kwargs):
         out = {}
         target_problem._evaluate(train_x, out)
         train_y = out['F']
+        train_y = np.atleast_2d(train_y).reshape(number_of_initial_samples, -1)
 
         if 'G' in out.keys():
             cons_y = out['G']
@@ -98,84 +99,171 @@ def normalization_with_self(y):
     max_y = np.max(y, axis=0)
     return (y - min_y)/(max_y - min_y)
 
-def search_for_matchingx(xu, search_iter, n_samples, problem, level, eim, eim_pop, eim_gen,  seed_index, enable_crossvalidation, method_selection):
-    train_x_l, train_y_l, cons_y_l = init_xy(n_samples, problem, seed_index,
+def search_for_matching_otherlevel_x(x_other, search_iter, n_samples, problem, level, eim, eim_pop, eim_gen,  seed_index, enable_crossvalidation, method_selection):
+    train_x, train_y, cons_y = init_xy(n_samples, problem, seed_index,
                                              **{'problem_type': 'bilevel'})
 
-    num_l = train_x_l.shape[0]
-    xu = np.atleast_2d(xu)
-    xu_expand = np.repeat(xu, num_l, axis=0)
-    complete_x = np.hstack((xu_expand, train_x_l))
+    num_l = train_x.shape[0]
+    x_other = np.atleast_2d(x_other)
+    xother_expand = np.repeat(x_other, num_l, axis=0)
+    if level == 'lower':
+        complete_x = np.hstack((xother_expand, train_x))
+    else:
+        complete_x = np.hstack((train_x, xother_expand))
+
     complete_y = problem.evaluate(complete_x, return_values_of=["F"])
 
     for i in range(search_iter):
-        train_x_l_norm, x_mean, x_std = norm_by_zscore(train_x_l)
-        train_y_l_norm, y_mean, y_std = norm_by_zscore(complete_y)
+        new_x = \
+            surrogate_search_for_nextx(
+                train_x,
+                complete_y,
+                eim,
+                eim_pop,
+                eim_gen,
+                method_selection,
+                enable_crossvalidation)
+        # true evaluation to get y
+        # add new x-y to training data and repeat
 
-        train_x_l_norm = np.atleast_2d(train_x_l_norm)
-        train_y_l_norm = np.atleast_2d(train_y_l_norm)
-
-        krg_l, krg_g_l = cross_val_krg(train_x_l_norm, train_y_l_norm, cons_y_l, enable_crossvalidation)
-
-        # search for matching lower x
-        # search for minimum values of
-        para = {  'level': level,
-                  'complete': xu,
-                  'train_y': complete_y,
-                  'norm_train_y': train_y_l_norm,
-                  'krg': krg_l,
-                  'krg_g': krg_g_l,
-                  'nadir': None,
-                  'ideal': None,
-                  'feasible': np.array([]),
-                  'ei_method': method_selection}
-
-        xbound_l = convert_with_zscore(problem.xl, x_mean, x_std)
-        xbound_u = convert_with_zscore(problem.xu, x_mean, x_std)
-        x_bounds = np.vstack((xbound_l, xbound_u)).T.tolist()  # for ea, column direction
-        recordFlag = False
-
-        pop_x, pop_f = optimizer_EI.optimizer_DE(eim,
-                                                 eim.n_obj,
-                                                 eim.n_constr,
-                                                 x_bounds,
-                                                 recordFlag,
-                                                 pop_test=None,
-                                                 F=0.7,
-                                                 CR=0.9,
-                                                 NP=eim_pop,
-                                                 itermax=eim_gen,
-                                                 flag=False,
-                                                 **para)
-        # evaluate on lower problem
-        pop_x = reverse_with_zscore(pop_x, x_mean, x_std)
-
-        train_x_l = np.vstack((train_x_l, pop_x))
-        complete_new_x = np.hstack((xu, pop_x))
-        complete_x = np.vstack((complete_x, complete_new_x))
+        train_x = np.vstack((train_x, new_x))
+        if level == 'lower':
+            complete_new_x = np.hstack((x_other, new_x))
+        else:
+            complete_new_x = np.hstack((new_x, x_other))
 
         complete_new_y = problem.evaluate(complete_new_x, return_values_of=["F"])
         complete_y = np.vstack((complete_y, complete_new_y))
         # print(np.min(complete_y))
 
     best_y_index = np.argmin(complete_y)
-    best_x = train_x_l[best_y_index, :]
+    best_x = train_x[best_y_index, :]
     np.set_printoptions(precision=2)
     print(best_x)
     np.set_printoptions(precision=2)
+    best_y = np.min(complete_y)
     print(np.min(complete_y))
-    print(xu)
 
-    return best_x, train_x_l, complete_y
+    # conduct local search with true evaluation
+    # localsearch_x, est_f = localsearch_on_surrogate(train_x_l, complete_y, best_x, eim)
+    localsearch_x, est_f = localsearch_on_trueEvaluation(best_x, level, x_other, problem)
 
-def surrogate_search_for_optx(train_x, train_y, problem, eim, eim_pop, eim_gen, method_selection, enable_crossvalidation):
-    norm_y = normalization_with_self(train_y)
-    krg, krg_g = cross_val_krg(train_x, norm_y, None, enable_crossvalidation)
+    localsearch_x = np.atleast_2d(localsearch_x)
+    if level == 'lower':
+        complete_new_x = np.hstack((x_other, localsearch_x))
+    else:
+        complete_new_x = np.hstack((localsearch_x, x_other))
 
-    para = {'level': None,
-            'complete': None,
-            'train_y': train_y,
-            'norm_train_y': norm_y,
+    localsearch_f = problem.evaluate(complete_new_x, return_values_of=["F"])
+
+    print(localsearch_x)
+    print('local search est f %.4f: '% est_f)
+    print('local search true f %.4f: '% localsearch_f)
+    if localsearch_f < best_y:
+        train_x = np.vstack((train_x, localsearch_x))
+        complete_y = np.vstack((complete_y, localsearch_f))
+        return localsearch_x, localsearch_f, train_x, complete_y
+
+    return np.atleast_2d(best_x), np.atleast_2d(best_y), train_x, complete_y,
+
+
+def localsearch_on_surrogate(train_x_l, complete_y,  ankor_x, problem):
+    # need to update for multiobj!!!
+    # conduct local search on the best surrogate
+    train_x_l_norm, x_mean, x_std = norm_by_zscore(train_x_l)
+    train_y_l_norm, y_mean, y_std = norm_by_zscore(complete_y)
+
+    train_x_l_norm = np.atleast_2d(train_x_l_norm)
+    train_y_l_norm = np.atleast_2d(train_y_l_norm)
+
+    krg_l, krg_g_l = cross_val_krg(train_x_l_norm, train_y_l_norm, None, False)
+
+    n_var = train_x_l.shape[1]
+    n_constr = 0
+
+    # bounds are zscored
+    xbound_l = convert_with_zscore(problem.xl, x_mean, x_std)
+    xbound_u = convert_with_zscore(problem.xu, x_mean, x_std)
+    ankor_x = np.atleast_2d(ankor_x)
+    ankor_x = convert_with_zscore(ankor_x, x_mean, x_std)
+    x_bounds = np.vstack((xbound_l, xbound_u)).T.tolist()  # for ea, column direction
+    recordFlag = False
+
+    problem_krg = single_krg_optim.single_krg_optim(krg_l[0], n_var, n_constr, 1, xbound_l, xbound_u)
+
+    para = {'add_info': ankor_x}
+    x_bounds = np.vstack((xbound_l, xbound_u)).T.tolist()  # for ea, column direction
+    recordFlag = False
+    pop_test = None
+    mut = 0.9
+    crossp = 0.1
+    popsize = 100
+    its = 100
+
+    pop_x, pop_f, pop_g, archive_x, archive_f, archive_g, (record_f, record_x) = \
+        optimizer_EI.optimizer(problem_krg,
+                               problem_krg.n_obj,
+                               problem_krg.n_constr,
+                               x_bounds,
+                               recordFlag,
+                               pop_test,
+                               mut,
+                               crossp,
+                               popsize,
+                               its,
+                               **para)
+    pop_x = reverse_with_zscore(pop_x[0], x_mean, x_std)
+    pop_f = reverse_with_zscore(pop_f[0], y_mean, y_std)
+
+    return pop_x, pop_f
+
+
+def localsearch_on_trueEvaluation(ankor_x, level, other_x, true_problem):
+    para = {'add_info': ankor_x,
+            'callback': bi_level_compensate_callback,
+            'level': level,
+            'other_x': other_x,
+            }
+
+    x_bounds = np.vstack((true_problem.xl, true_problem.xu)).T.tolist()  # for ea, column direction
+    recordFlag = False
+    pop_test = None
+    mut = 0.9
+
+    crossp = 0.1
+    popsize = 20
+    its = 20
+
+    pop_x, pop_f, pop_g, archive_x, archive_f, archive_g, (record_f, record_x) = \
+        optimizer_EI.optimizer(true_problem,
+                               true_problem.n_obj,
+                               true_problem.n_constr,
+                               x_bounds,
+                               recordFlag,
+                               pop_test,
+                               mut,
+                               crossp,
+                               popsize,
+                               its,
+                               **para)
+    return pop_x[0], pop_f[0]
+
+
+def surrogate_search_for_nextx(train_x, train_y, eim, eim_pop, eim_gen, method_selection, enable_crossvalidation):
+    train_x_norm, x_mean, x_std = norm_by_zscore(train_x)
+    train_y_norm, y_mean, y_std = norm_by_zscore(train_y)
+
+    train_x_norm = np.atleast_2d(train_x_norm)
+    train_y_norm = np.atleast_2d(train_y_norm)
+
+    krg, krg_g = cross_val_krg(train_x_norm, train_y_norm, None, enable_crossvalidation)
+
+    xbound_l = convert_with_zscore(eim.xl, x_mean, x_std)
+    xbound_u = convert_with_zscore(eim.xu, x_mean, x_std)
+    x_bounds = np.vstack((xbound_l, xbound_u)).T.tolist()  # for ea, column direction
+
+    para = {'train_y': train_y,
+            'norm_train_y': train_y_norm,
             'krg': krg,
             'krg_g': krg_g,
             'nadir': None,
@@ -183,21 +271,20 @@ def surrogate_search_for_optx(train_x, train_y, problem, eim, eim_pop, eim_gen, 
             'feasible': np.array([]),
             'ei_method': method_selection}
 
-    x_bounds = np.vstack((problem.xl, problem.xu)).T.tolist()  # for ea, column direction
     recordFlag = False
     pop_x, pop_f = optimizer_EI.optimizer_DE(eim,
                                              eim.n_obj,
                                              eim.n_constr,
                                              x_bounds,
                                              recordFlag,
-                                             pop_test=None,
+                                             pop_test=False,
                                              F=0.8,
                                              CR=0.8,
                                              NP=eim_pop,
                                              itermax=eim_gen,
                                              flag=False,
                                              **para)
-
+    pop_x = reverse_with_zscore(pop_x, x_mean, x_std)
     return pop_x
 
 
@@ -266,12 +353,12 @@ def bi_level_compensate(level, combine_value, x, activate):
     if not activate:
         return x
     else:
-        x = check_array(x)
+        # x = check_array(x)
         combine_value = check_array(combine_value)
         n = x.shape[0]
         # extend combine values
         combine_value = np.repeat(combine_value, n, axis=0)
-        if level=='lower':
+        if level =='lower':
             x = np.hstack((combine_value, x))
             return x
         if level == 'upper':
@@ -279,8 +366,8 @@ def bi_level_compensate(level, combine_value, x, activate):
             return x
 
 
-def bi_level_compensate_callback(x):
-    x = bi_level_compensate('lower', np.atleast_2d([0]*2), x, True)
+def bi_level_compensate_callback(x, level, compensate):
+    x = bi_level_compensate(level, np.atleast_2d(compensate), x, True)
     return x
 
 
@@ -308,7 +395,7 @@ def save_converge_plot(converge_track, problem_name, method_selection, seed_inde
     plt.savefig(saveName)
 
 
-def save_accuracy(problem_u, problem_l, best_y_u, best_y_l, seed_index,method_selection):
+def save_accuracy(problem_u, problem_l, best_y_u, best_y_l, seed_index, method_selection):
     accuracy_u = np.abs(best_y_u - problem_u.opt)
     accuracy_l = np.abs(best_y_l - problem_l.opt)
     s = [accuracy_u, accuracy_l]
@@ -337,7 +424,7 @@ def results_process_bestf(BO_target_problems, method_selection):
         result_folder = working_folder + '\\bi_output' + '\\' + problem_name + '_' + method_selection
 
         accuracy_data = []
-        for seed_index in range(11):
+        for seed_index in range(1):
             saveName = result_folder + '\\accuracy_' + str(seed_index) + '.csv'
             data = np.loadtxt(saveName, delimiter=',')
             accuracy_data = np.append(accuracy_data, data)
@@ -358,7 +445,72 @@ def results_process_bestf(BO_target_problems, method_selection):
 
 if __name__ == "__main__":
 
-    print(0)
+    from EI_krg import expected_improvement
+
+    np.random.seed(0)
+    n_samples = 32
+    n_iterations = 100
+    test_f = Surrogate_test.lower_level_test5()
+    eim = \
+        EI.EIM(test_f.n_var, n_obj=1, n_constr=test_f.n_constr,
+               upper_bound=test_f.xu,
+               lower_bound=test_f.xl)
+
+    train_x, train_y, cons_y = init_xy(n_samples, test_f, 0)
+
+
+    for i in range(n_iterations):
+        train_x_norm, x_mean, x_std = norm_by_zscore(train_x)
+        train_y_norm, y_mean, y_std = norm_by_zscore(train_y)
+
+        train_x_norm = np.atleast_2d(train_x_norm)
+        train_y_norm = np.atleast_2d(train_y_norm)
+
+        krg, krg_g = cross_val_krg(train_x_norm, train_y_norm, None, False)
+
+        para = {'level': None,
+                'complete': None,
+                'train_y': train_y,
+                'norm_train_y': train_y_norm,
+                'krg': krg,
+                'krg_g': krg_g,
+                'nadir': None,
+                'ideal': None,
+                'feasible': np.array([]),
+                'ei_method': 'eim'}
+
+
+
+        xbound_l = convert_with_zscore(eim.xl, x_mean, x_std)
+        xbound_u = convert_with_zscore(eim.xu, x_mean, x_std)
+        x_bounds = np.vstack((xbound_l, xbound_u)).T.tolist()  # for ea, column direction
+        recordFlag = False
+
+        pop_x, pop_f = optimizer_EI.optimizer_DE(eim,
+                                                 eim.n_obj,
+                                                 eim.n_constr,
+                                                 x_bounds,
+                                                 recordFlag,
+                                                 pop_test=None,
+                                                 F=0.7,
+                                                 CR=0.9,
+                                                 NP=50,
+                                                 itermax=50,
+                                                 flag=False,
+                                                 **para)
+        # evaluate on lower problem
+        new_x = reverse_with_zscore(pop_x, x_mean, x_std)
+        train_x = np.vstack((train_x, new_x))
+        new_y = test_f.evaluate(new_x, return_values_of='F')
+        train_y = np.vstack((train_y, new_y))
+
+    best_y_index = np.argmin(train_y)
+    best_x = train_x[best_y_index, :]
+    np.set_printoptions(precision=2)
+    print(best_x)
+    np.set_printoptions(precision=2)
+    print(np.min(train_y))
+
 
 
 

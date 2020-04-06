@@ -30,8 +30,6 @@ class EIM(Problem):
     def _evaluate(self, x, out, *args, **kwargs):
 
         # input should be in the right range of defined problem
-        level = kwargs['level']
-        complete = kwargs['complete']
         train_y = kwargs['train_y']
         norm_train_y = kwargs['norm_train_y']
         feasible = kwargs['feasible']
@@ -42,8 +40,6 @@ class EIM(Problem):
         krg_g = kwargs['krg_g']
 
         eim = expected_improvement(x,
-                                   complete,
-                                   level,
                                    train_y,
                                    norm_train_y,
                                    feasible,

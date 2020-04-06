@@ -49,7 +49,6 @@ if __name__ == "__main__":
         # ax1.plot(test_x, pred_y + pred_y_sig_norm, 'y')
         # ax1.plot(test_x, pred_y - pred_y_sig_norm, 'y')
         ax1.fill_between(test_x.ravel(), (pred_y + pred_y_sig_norm).ravel(), (pred_y - pred_y_sig_norm).ravel(), alpha=0.5)
-
         ax1.scatter(train_x, train_y)
 
         ax2 = ax1.twinx()  # instantiate a second axes that shares the same x-axis

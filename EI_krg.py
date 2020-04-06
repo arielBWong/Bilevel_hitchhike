@@ -220,8 +220,6 @@ def normalization_with_nd(mu, data_y):
 
 
 def expected_improvement(x,
-                         complete,
-                         level,
                          train_y,
                          norm_train_y,
                          feasible,
@@ -235,17 +233,6 @@ def expected_improvement(x,
     n_samples = x.shape[0]
     n_obj = len(krg)
     n_g = len(krg_g)
-
-
-    if level == 'upper':
-        complete = np.atleast_2d(complete)
-        complete = np.repeat(complete, n_samples, axis=0)
-        # x = np.hstack((x, complete))
-
-    if level == 'lower':
-        complete = np.atleast_2d(complete)
-        complete = np.repeat(complete, n_samples, axis=0)
-        # x = np.hstack((complete, x))
 
 
     # predict f

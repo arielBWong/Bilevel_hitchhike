@@ -25,9 +25,9 @@ from pymop.factory import get_uniform_weights
 import EI_krg
 from copy import deepcopy
 import result_processing
-from bilevel_utility import search_for_matchingx, save_for_count_evaluation, \
-    surrogate_search_for_optx, problem_test, save_converge, save_converge_plot,\
-    save_accuracy, results_process_bestf, ea_seach_for_matchingx
+from bilevel_utility import save_for_count_evaluation, localsearch_on_trueEvaluation, \
+    surrogate_search_for_nextx, problem_test, save_converge, save_converge_plot,\
+    save_accuracy, results_process_bestf, ea_seach_for_matchingx, search_for_matching_otherlevel_x
 
 
 def return_current_extreme(train_x, train_y):
@@ -1415,15 +1415,15 @@ def main_bi_mo(seed_index, target_problem, enable_crossvalidation, method_select
     n_iter = 80  # stopping criterion set
     converge_track = []
     lower_interation = 30
-    stop = 100
+    stop = 80
     start = time.time()
 
     # init upper level variables, bilevel only init xu no evaluation is done
     train_x_u, train_y_u, cons_y_u = init_xy(number_of_initial_samples, target_problem_u, seed_index, **{'problem_type':'bilevel'})
 
-    # test purpose
-    train_x_u = np.atleast_2d([0] * target_problem_u.n_levelvar)
-    train_x_u = np.repeat(train_x_u, number_of_initial_samples, axis=0)
+    # test purpose for validation only
+    # train_x_u = np.atleast_2d([0] * target_problem_u.n_levelvar)
+    # train_x_u = np.repeat(train_x_u, number_of_initial_samples, axis=0)
 
     eim_l = EI.EIM(target_problem_l.n_levelvar, n_obj=1, n_constr=target_problem_l.n_constr,
                    upper_bound=target_problem_l.xu,
@@ -1431,48 +1431,58 @@ def main_bi_mo(seed_index, target_problem, enable_crossvalidation, method_select
 
     # for each upper level variable, search for its corresponding lower variable for compensation
     num_u = train_x_u.shape[0]
-    num_pop = 20
+    num_pop = 50
     num_gen = 50
 
     # circumstantial varaible for saving
     x_evaluated_u = np.atleast_2d(np.zeros((1, target_problem_u.n_var)))
-    x_evaluated_l = np.atleast_2d(np.zeros((1, target_problem_l.n_var)))
+    x_evaluated_l = np.atleast_2d(np.zeros((1, target_problem_l.n_levelvar)))
     y_evaluated_u = np.atleast_2d(np.zeros((1, target_problem_u.n_obj)))
     y_evaluated_l = np.atleast_2d(np.zeros((1, target_problem_l.n_obj)))
 
-    complete_u = []
+    # record matching f
+    matching_xl = []
+    matching_fl = []
     for xu in train_x_u:
-        matching_x, train_x_l, train_y_l = search_for_matchingx(xu,
-                                                                lower_interation,
-                                                                number_of_initial_samples,
-                                                                target_problem_l,
-                                                                'lower',
-                                                                eim_l,
-                                                                num_pop,
-                                                                num_gen,
-                                                                seed_index,
-                                                                enable_crossvalidation,
-                                                                method_selection)
+        matching_x, matching_f, _, _ = \
+            search_for_matching_otherlevel_x(xu,
+                                             lower_interation,
+                                             number_of_initial_samples,
+                                             target_problem_l,
+                                             'lower',
+                                             eim_l,
+                                             num_pop,
+                                             num_gen,
+                                             seed_index,
+                                             enable_crossvalidation,
+                                             method_selection)
 
 
         # matching_x, train_x_l, train_y_l = ea_seach_for_matchingx(xu, target_problem_l)
         # test stop there
-        x_evaluated_l = save_for_count_evaluation(xu, train_x_l,'lower', x_evaluated_l)
-        y_evaluated_l = np.vstack((y_evaluated_l, train_y_l))
-        complete_u = np.append(complete_u, matching_x)
-    complete_u = np.atleast_2d(complete_u).reshape(-1, target_problem_l.n_levelvar)
+        # no more saving lower level each evaluations
+        # x_evaluated_l = save_for_count_evaluation(xu, train_x_l, 'lower', x_evaluated_l)
+        # y_evaluated_l = np.vstack((y_evaluated_l, train_y_l))
+
+        matching_fl = np.append(matching_fl, matching_f)
+        matching_xl = np.append(matching_xl, matching_x)
+    matching_xl = np.atleast_2d(matching_xl).reshape(-1, target_problem_l.n_levelvar)
+    matching_fl = np.atleast_2d(matching_fl).reshape(-1, target_problem_l.n_obj)
 
     # true evaluation
-    complete_x_u = np.hstack((train_x_u, complete_u))
+    complete_x_u = np.hstack((train_x_u, matching_xl))
     complete_y_u = target_problem_u.evaluate(complete_x_u, return_values_of=["F"])
 
     # count true evaluations
     x_evaluated_u = np.vstack((x_evaluated_u, complete_x_u))
     y_evaluated_u = np.vstack((y_evaluated_u, complete_y_u))
-
     # before entering evaluation, adjusting save, delete first row
     x_evaluated_u = np.delete(x_evaluated_u, obj=0, axis=0)
     y_evaluated_u = np.delete(y_evaluated_u, obj=0, axis=0)
+
+    x_evaluated_l = np.vstack((x_evaluated_l, matching_xl))
+    y_evaluated_l = np.vstack((y_evaluated_l, matching_fl))
+
     x_evaluated_l = np.delete(x_evaluated_l, obj=0, axis=0)
     y_evaluated_l = np.delete(y_evaluated_l, obj=0, axis=0)
 
@@ -1480,79 +1490,105 @@ def main_bi_mo(seed_index, target_problem, enable_crossvalidation, method_select
     eim_u = EI.EIM(target_problem_u.n_levelvar, n_obj=1, n_constr=target_problem_u.n_constr,
                    upper_bound=target_problem_u.xu,
                    lower_bound=target_problem_u.xl)
-    searched_xu = surrogate_search_for_optx(train_x_u,
-                                          complete_y_u,
-                                          target_problem_u,
-                                          eim_u,
-                                          num_pop,
-                                          num_gen,
-                                          method_selection,
-                                          enable_crossvalidation)
+    searched_xu = \
+        surrogate_search_for_nextx(train_x_u,
+                                   complete_y_u,
+                                   eim_u,
+                                   num_pop,
+                                   num_gen,
+                                   method_selection,
+                                   enable_crossvalidation)
 
     # find lower level problem complete for this new pop_x
     for i in range(n_iter):
         print('iteration %d' % i)
-        matching_xl, train_x_l, train_y_l = search_for_matchingx(searched_xu,
-                                                                 lower_interation,
-                                                                 number_of_initial_samples,
-                                                                 target_problem_l,
-                                                                 'lower',
-                                                                 eim_l,
-                                                                 num_pop,
-                                                                 num_gen,
-                                                                 seed_index,
-                                                                 enable_crossvalidation,
-                                                                 method_selection)
-
-        # saved l is complete variables upper + lower
-        x_evaluated_l = save_for_count_evaluation(searched_xu, train_x_l, 'lower', x_evaluated_l)
-        y_evaluated_l = np.vstack((y_evaluated_l, train_y_l))
+        matching_xl, matching_fl, _, _ = \
+            search_for_matching_otherlevel_x(searched_xu,
+                                             lower_interation,
+                                             number_of_initial_samples,
+                                             target_problem_l,
+                                             'lower',
+                                             eim_l,
+                                             num_pop,
+                                             num_gen,
+                                             seed_index,
+                                             enable_crossvalidation,
+                                             method_selection)
 
         # combine matching xl to xu for true evaluation
         matching_xl = np.atleast_2d(matching_xl)
         new_complete_xu = np.hstack((searched_xu, matching_xl))
         new_complete_yu = target_problem_u.evaluate(new_complete_xu, return_values_of=["F"])
-        print('iteration %d, yu true evaluated: %f'%(i, new_complete_yu))
+        print('iteration %d, yu true evaluated: %f' % (i, new_complete_yu))
+
+        # save training data compete lower and upper
+        x_evaluated_u = np.vstack((x_evaluated_u, new_complete_xu))
+        y_evaluated_u = np.vstack((y_evaluated_u, new_complete_yu))
+        x_evaluated_l = np.vstack((x_evaluated_l, matching_xl))
+        y_evaluated_l = np.vstack((y_evaluated_l, matching_fl))
 
         # adding new xu yu to training
         train_x_u = np.vstack((train_x_u, searched_xu))
         complete_y_u = np.vstack((complete_y_u, new_complete_yu))
 
-        # search for next xu
-        searched_xu = surrogate_search_for_optx(train_x_u,
-                                                complete_y_u,
-                                                target_problem_u,
-                                                eim_u,
-                                                num_pop,
-                                                num_gen,
-                                                method_selection,
-                                                enable_crossvalidation)
+        n = x_evaluated_u.shape[0]
+        if n > stop:
+            break
 
-        # save training data compete lower and upper
-        x_evaluated_u = np.vstack((x_evaluated_u, new_complete_xu))
-        y_evaluated_u = np.vstack((y_evaluated_u, new_complete_yu))
+        # if evaluation limit is not reached, search for next xu
+        searched_xu = \
+            surrogate_search_for_nextx(train_x_u,
+                                       complete_y_u,
+                                       eim_u,
+                                       num_pop,
+                                       num_gen,
+                                       method_selection,
+                                       enable_crossvalidation)
+
 
         # record convergence
         converge_track.append(np.min(y_evaluated_u))
         bu = np.min(y_evaluated_u)
         print('iteration %d, yu true evaluated/best so far: %.4f/%.4f ' % (i, new_complete_yu, bu))
 
-        # n = x_evaluated_u.shape[0]
-        # if n > stop:
-            # break
-    x_index = np.argmin(y_evaluated_u)
-    print('minimum value of yu: ', np.min(y_evaluated_u))
-    print('minimum yu\'s corresponding x: ', x_evaluated_u[x_index, :])
 
-    print('minimum value of yl: ', np.min(y_evaluated_l))
-    print('minimum yl\'s corresponding x: ', x_evaluated_l[x_index, :])
+    # conduct a local search based on fl
+    min_fu_index = np.argmin(y_evaluated_u)
+    best_xu_sofar = x_evaluated_u[min_fu_index, 0:target_problem_u.n_levelvar]
+    matching_xl = x_evaluated_l[min_fu_index, :]
+
+    localsearch_xl, localsearch_fl = localsearch_on_trueEvaluation(matching_xl, 'lower', best_xu_sofar, target_problem_l)
+
+    new_local_xu, new_local_fu, _, _ = \
+        search_for_matching_otherlevel_x(localsearch_xl,
+                                         30,
+                                         20,
+                                         target_problem_u,
+                                         'upper',
+                                         eim_u,
+                                         num_pop,
+                                         num_gen,
+                                         seed_index,
+                                         enable_crossvalidation,
+                                         method_selection)
+
+    new_complete_x = np.hstack((np.atleast_2d(new_local_xu), np.atleast_2d(localsearch_xl)))
+    new_fl = target_problem_l.evaluate(new_complete_x, return_values_of=["F"])
+    new_fu = target_problem_u.evaluate(new_complete_x, return_values_of=["F"])
+    y_evaluated_u = np.vstack((y_evaluated_u, new_fu))
+    y_evaluated_l = np.vstack((y_evaluated_l, new_fl))
+    x_evaluated_u = np.vstack((x_evaluated_u, new_complete_x))
+    x_evaluated_l = np.vstack((x_evaluated_l, np.atleast_2d(matching_xl)))
+    converge_track.append(new_fu)
+
+
     end = time.time()
     duration = (end - start) / 60
     print('overall time used: %0.4f mins' % duration)
 
 
-    save_accuracy(target_problem_u, target_problem_l, np.min(y_evaluated_u), np.min(y_evaluated_l), seed_index, method_selection)
-    save_converge(converge_track, target_problem_u.name(), method_selection, seed_index)
+    save_accuracy(target_problem_u, target_problem_l, new_fu[0,0], new_fl[0,0], seed_index, method_selection)
+    # save_converge(converge_track, target_problem_u.name(), method_selection, seed_index)
     save_converge_plot(converge_track, target_problem_u.name(), method_selection, seed_index)
 
 
@@ -1567,14 +1603,14 @@ if __name__ == "__main__":
 
     MO_target_problems = [
                           # 'BNH()',
-                           #  'TNK()',
-                           # 'WeldedBeam()'
+                          #  'TNK()',
+                          # 'WeldedBeam()'
                           # 'ZDT1(n_var=6)',
                           # 'ZDT2(n_var=6)',
                           # 'ZDT3(n_var=6)',
-                            #'WFG.WFG_1(n_var=2, n_obj=2, K=1)',
-                            # 'WFG.WFG_2(n_var=6, n_obj=2, K=4)',
-                           # 'WFG.WFG_3(n_var=6, n_obj=2, K=4)',
+                          #'WFG.WFG_1(n_var=2, n_obj=2, K=1)',
+                          # 'WFG.WFG_2(n_var=6, n_obj=2, K=4)',
+                          # 'WFG.WFG_3(n_var=6, n_obj=2, K=4)',
                            # 'WFG.WFG_4(n_var=6, n_obj=2, K=4)',
                          #'WFG.WFG_5(n_var=6, n_obj=2, K=4)',
                           #'WFG.WFG_6(n_var=6, n_obj=2, K=4)',
@@ -1617,13 +1653,13 @@ if __name__ == "__main__":
                 args.append((seed, target_problem, False, method, method))
 
     n = len(BO_target_problems)
-    for seed in range(0, 11):
+    for seed in range(0, 1):
         for j in np.arange(0, n, 2):
             for method in methods_ops:
-                target_problem =BO_target_problems [j: j+2]
+                target_problem = BO_target_problems[j: j+2]
                 args.append((seed, target_problem, False, method, method))
     # main_mo_c(1, MO_target_problems[0], False, 'eim', 'eim')
-    i = 0
+    i = 2
     main_bi_mo(0, BO_target_problems[i:i+2], False, 'eim', 'eim')
     # problem_test()
 
@@ -1631,7 +1667,7 @@ if __name__ == "__main__":
     # pool = mp.Pool(processes=num_workers)
     # pool.starmap(main_bi_mo, ([arg for arg in args]))
 
-    #results_process_bestf(BO_target_problems, 'eim')
+    results_process_bestf(BO_target_problems, 'eim')
 
     ''' 
     target_problems = [branin.new_branin_5(),
