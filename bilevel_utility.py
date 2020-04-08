@@ -8,6 +8,7 @@ from pymop import ZDT1, ZDT2, ZDT3, ZDT4, ZDT6, \
                   BNH, Carside, Kursawe, OSY, Truss2D, WeldedBeam, TNK
 from EI_krg import acqusition_function, close_adjustment
 from sklearn.utils.validation import check_array
+import scipy
 from sklearn.metrics import pairwise_distances
 import pyDOE
 from cross_val_hyperp import cross_val_krg
@@ -140,6 +141,7 @@ def search_for_matching_otherlevel_x(x_other, search_iter, n_samples, problem, l
     best_x = train_x[best_y_index, :]
     np.set_printoptions(precision=2)
     print(best_x)
+    best_x = np.atleast_2d(best_x)
     np.set_printoptions(precision=2)
     best_y = np.min(complete_y)
     print(np.min(complete_y))
@@ -219,6 +221,32 @@ def localsearch_on_surrogate(train_x_l, complete_y,  ankor_x, problem):
 
 
 def localsearch_on_trueEvaluation(ankor_x, level, other_x, true_problem):
+    ankor_x = np.atleast_2d(ankor_x)
+    ankor_x = check_array(ankor_x)
+
+    def obj_func(x):
+        x = np.atleast_2d(x)
+        if level == 'lower':
+            x = np.hstack((other_x, x))
+        else:
+            x = np.hstack((x, other_x))
+        return true_problem.evaluate(x,  return_values_of=["F"])
+
+    bounds = scipy.optimize.Bounds(lb=true_problem.xl, ub=true_problem.xu)
+    opt_res = scipy.optimize.minimize(
+         obj_func, ankor_x, method="L-BFGS-B", options={'maxfun': 100}, jac=False,
+         bounds=bounds)
+
+    #opt_res = scipy.optimize.minimize(
+    #    obj_func, ankor_x, method="SLSQP", options={'maxfun': 100},jac=False,
+    #    bounds=bounds)
+
+    print('number of function evaluations: %d '% opt_res.nfev)
+
+    x, f = opt_res.x, opt_res.fun
+    return x, f
+
+    '''
     para = {'add_info': ankor_x,
             'callback': bi_level_compensate_callback,
             'level': level,
@@ -232,7 +260,7 @@ def localsearch_on_trueEvaluation(ankor_x, level, other_x, true_problem):
 
     crossp = 0.1
     popsize = 20
-    its = 20
+    its = 50
 
     pop_x, pop_f, pop_g, archive_x, archive_f, archive_g, (record_f, record_x) = \
         optimizer_EI.optimizer(true_problem,
@@ -247,7 +275,7 @@ def localsearch_on_trueEvaluation(ankor_x, level, other_x, true_problem):
                                its,
                                **para)
     return pop_x[0], pop_f[0]
-
+    '''
 
 def surrogate_search_for_nextx(train_x, train_y, eim, eim_pop, eim_gen, method_selection, enable_crossvalidation):
     train_x_norm, x_mean, x_std = norm_by_zscore(train_x)
@@ -387,6 +415,9 @@ def save_converge_plot(converge_track, problem_name, method_selection, seed_inde
     if not os.path.isdir(result_folder):
         os.mkdir(result_folder)
     saveName = result_folder + '\\converge_' + str(seed_index) + '.png'
+
+    print()
+
     plt.plot(converge_track)
     plt.title(problem_name + ' seed ' + str(seed_index))
     plt.xlabel('Function evaluation numbers')
@@ -412,6 +443,7 @@ def results_process_bestf(BO_target_problems, method_selection):
     import pandas as pd
     n = len(BO_target_problems)
     mean_data = []
+    median_data = []
     pname_list =[]
     for j in np.arange(0, n, 2):
         target_problem = BO_target_problems[j]
@@ -424,92 +456,35 @@ def results_process_bestf(BO_target_problems, method_selection):
         result_folder = working_folder + '\\bi_output' + '\\' + problem_name + '_' + method_selection
 
         accuracy_data = []
-        for seed_index in range(1):
+        for seed_index in range(11):
             saveName = result_folder + '\\accuracy_' + str(seed_index) + '.csv'
             data = np.loadtxt(saveName, delimiter=',')
             accuracy_data = np.append(accuracy_data, data)
         accuracy_data = np.atleast_2d(accuracy_data).reshape(-1, 2)
-        accuracy_data = np.mean(accuracy_data, axis=0)
-        mean_data = np.append(mean_data, accuracy_data)
-    mean_data = np.atleast_2d(mean_data).reshape(-1, 2)
+        accuracy_mean = np.mean(accuracy_data, axis=0)
+        accuracy_median = np.median(accuracy_data, axis=0)
+        mean_data = np.append(mean_data, accuracy_mean)
+        median_data = np.append(median_data, accuracy_median)
 
+    mean_data = np.atleast_2d(mean_data).reshape(-1, 2)
+    median_data = np.atleast_2d(median_data).reshape(-1, 2)
 
     h = pd.DataFrame(mean_data, columns=['ul','ll'], index=pname_list)
+    h2 = pd.DataFrame(median_data, columns=['ul','ll'], index=pname_list)
     working_folder = os.getcwd()
     result_folder = working_folder + '\\bi_process'
     saveName = result_folder + '\\accuracy_mean.csv'
+    saveName2 = result_folder + '\\accuracy_median.csv'
     h.to_csv(saveName)
-
+    h2.to_csv(saveName2)
 
 
 
 if __name__ == "__main__":
-
-    from EI_krg import expected_improvement
-
-    np.random.seed(0)
-    n_samples = 32
-    n_iterations = 100
-    test_f = Surrogate_test.lower_level_test5()
-    eim = \
-        EI.EIM(test_f.n_var, n_obj=1, n_constr=test_f.n_constr,
-               upper_bound=test_f.xu,
-               lower_bound=test_f.xl)
-
-    train_x, train_y, cons_y = init_xy(n_samples, test_f, 0)
-
-
-    for i in range(n_iterations):
-        train_x_norm, x_mean, x_std = norm_by_zscore(train_x)
-        train_y_norm, y_mean, y_std = norm_by_zscore(train_y)
-
-        train_x_norm = np.atleast_2d(train_x_norm)
-        train_y_norm = np.atleast_2d(train_y_norm)
-
-        krg, krg_g = cross_val_krg(train_x_norm, train_y_norm, None, False)
-
-        para = {'level': None,
-                'complete': None,
-                'train_y': train_y,
-                'norm_train_y': train_y_norm,
-                'krg': krg,
-                'krg_g': krg_g,
-                'nadir': None,
-                'ideal': None,
-                'feasible': np.array([]),
-                'ei_method': 'eim'}
+    results_process_bestf()
 
 
 
-        xbound_l = convert_with_zscore(eim.xl, x_mean, x_std)
-        xbound_u = convert_with_zscore(eim.xu, x_mean, x_std)
-        x_bounds = np.vstack((xbound_l, xbound_u)).T.tolist()  # for ea, column direction
-        recordFlag = False
-
-        pop_x, pop_f = optimizer_EI.optimizer_DE(eim,
-                                                 eim.n_obj,
-                                                 eim.n_constr,
-                                                 x_bounds,
-                                                 recordFlag,
-                                                 pop_test=None,
-                                                 F=0.7,
-                                                 CR=0.9,
-                                                 NP=50,
-                                                 itermax=50,
-                                                 flag=False,
-                                                 **para)
-        # evaluate on lower problem
-        new_x = reverse_with_zscore(pop_x, x_mean, x_std)
-        train_x = np.vstack((train_x, new_x))
-        new_y = test_f.evaluate(new_x, return_values_of='F')
-        train_y = np.vstack((train_y, new_y))
-
-    best_y_index = np.argmin(train_y)
-    best_x = train_x[best_y_index, :]
-    np.set_printoptions(precision=2)
-    print(best_x)
-    np.set_printoptions(precision=2)
-    print(np.min(train_y))
 
 
 

@@ -1412,7 +1412,7 @@ def main_bi_mo(seed_index, target_problem, enable_crossvalidation, method_select
 
     # number_of_initial_samples = 11 * n_vals - 1
     number_of_initial_samples = 20
-    n_iter = 80  # stopping criterion set
+    n_iter = 100  # stopping criterion set
     converge_track = []
     lower_interation = 30
     stop = 80
@@ -1431,8 +1431,8 @@ def main_bi_mo(seed_index, target_problem, enable_crossvalidation, method_select
 
     # for each upper level variable, search for its corresponding lower variable for compensation
     num_u = train_x_u.shape[0]
-    num_pop = 50
-    num_gen = 50
+    num_pop = 100
+    num_gen = 100
 
     # circumstantial varaible for saving
     x_evaluated_u = np.atleast_2d(np.zeros((1, target_problem_u.n_var)))
@@ -1443,7 +1443,9 @@ def main_bi_mo(seed_index, target_problem, enable_crossvalidation, method_select
     # record matching f
     matching_xl = []
     matching_fl = []
+    count = 0
     for xu in train_x_u:
+        count = count + 1
         matching_x, matching_f, _, _ = \
             search_for_matching_otherlevel_x(xu,
                                              lower_interation,
@@ -1554,32 +1556,19 @@ def main_bi_mo(seed_index, target_problem, enable_crossvalidation, method_select
 
     # conduct a local search based on fl
     min_fu_index = np.argmin(y_evaluated_u)
-    best_xu_sofar = x_evaluated_u[min_fu_index, 0:target_problem_u.n_levelvar]
-    matching_xl = x_evaluated_l[min_fu_index, :]
+    best_xu_sofar = np.atleast_2d(x_evaluated_u[min_fu_index, 0:target_problem_u.n_levelvar])
+    matching_xl = np.atleast_2d(x_evaluated_l[min_fu_index, :])
 
     localsearch_xl, localsearch_fl = localsearch_on_trueEvaluation(matching_xl, 'lower', best_xu_sofar, target_problem_l)
 
-    new_local_xu, new_local_fu, _, _ = \
-        search_for_matching_otherlevel_x(localsearch_xl,
-                                         30,
-                                         20,
-                                         target_problem_u,
-                                         'upper',
-                                         eim_u,
-                                         num_pop,
-                                         num_gen,
-                                         seed_index,
-                                         enable_crossvalidation,
-                                         method_selection)
-
-    new_complete_x = np.hstack((np.atleast_2d(new_local_xu), np.atleast_2d(localsearch_xl)))
+    new_complete_x = np.hstack((np.atleast_2d(best_xu_sofar), np.atleast_2d(localsearch_xl)))
     new_fl = target_problem_l.evaluate(new_complete_x, return_values_of=["F"])
     new_fu = target_problem_u.evaluate(new_complete_x, return_values_of=["F"])
     y_evaluated_u = np.vstack((y_evaluated_u, new_fu))
     y_evaluated_l = np.vstack((y_evaluated_l, new_fl))
     x_evaluated_u = np.vstack((x_evaluated_u, new_complete_x))
     x_evaluated_l = np.vstack((x_evaluated_l, np.atleast_2d(matching_xl)))
-    converge_track.append(new_fu)
+    converge_track.append(new_fu[0, 0])
 
 
     end = time.time()
@@ -1653,21 +1642,21 @@ if __name__ == "__main__":
                 args.append((seed, target_problem, False, method, method))
 
     n = len(BO_target_problems)
-    for seed in range(0, 1):
+    for seed in range(0, 11):
         for j in np.arange(0, n, 2):
             for method in methods_ops:
                 target_problem = BO_target_problems[j: j+2]
                 args.append((seed, target_problem, False, method, method))
     # main_mo_c(1, MO_target_problems[0], False, 'eim', 'eim')
-    i = 2
-    main_bi_mo(0, BO_target_problems[i:i+2], False, 'eim', 'eim')
+    # i = 14
+    # main_bi_mo(0, BO_target_problems[i:i+2], False, 'eim', 'eim')
     # problem_test()
 
-    # num_workers = 6
-    # pool = mp.Pool(processes=num_workers)
-    # pool.starmap(main_bi_mo, ([arg for arg in args]))
+    num_workers = 6
+    pool = mp.Pool(processes=num_workers)
+    pool.starmap(main_bi_mo, ([arg for arg in args]))
 
-    results_process_bestf(BO_target_problems, 'eim')
+    # results_process_bestf(BO_target_problems, 'eim')
 
     ''' 
     target_problems = [branin.new_branin_5(),

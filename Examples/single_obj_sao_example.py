@@ -56,9 +56,7 @@ if __name__ == "__main__":
         # ------------------------------
 
 
-        para = {'level': None,
-                'complete': None,
-                'train_y': train_y,
+        para = {'train_y': train_y,
                 'norm_train_y': train_y_norm,
                 'krg': krg,
                 'krg_g': krg_g,

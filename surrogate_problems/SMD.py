@@ -34,7 +34,7 @@ class SMD1_F(Problem):
                          type_var=anp.double)
 
     def _evaluate(self, x, out, *args, **kwargs):
-        # x = check_array(x)
+        x = check_array(x)
 
         xu1 = x[:, np.arange(0, self.p)]
         xu2 = x[:,  np.arange(self.p, (self.p + self.r))]
@@ -78,7 +78,7 @@ class SMD1_f(Problem):
 
 
     def _evaluate(self, x, out, *args, **kwargs):
-        # x = check_array(x)
+        x = check_array(x)
 
         xu1 = x[:, np.arange(0, self.p)]
         xu2 = x[:, np.arange(self.p, (self.p + self.r))]
@@ -111,8 +111,8 @@ class SMD2_F(Problem):
         xu2_ubound = [1] * r
         xu2_lbound = [-5] * r
 
-        self.xl = anp.array(xu1_ubound + xu2_ubound)
-        self.xu = anp.array(xu1_lbound + xu2_lbound)
+        self.xl = anp.array(xu1_lbound + xu2_lbound)
+        self.xu = anp.array(xu1_ubound + xu2_ubound)
 
         super().__init__(n_var=self.n_var,
                          n_obj=self.n_obj,
@@ -122,7 +122,7 @@ class SMD2_F(Problem):
                          type_var=anp.double)
 
     def _evaluate(self, x, out, *args, **kwargs):
-        # x = check_array(x)
+        x = check_array(x)
 
         xu1 = x[:, np.arange(0, self.p)]
         xu2 = x[:,  np.arange(self.p, (self.p + self.r))]
@@ -151,8 +151,8 @@ class SMD2_f(Problem):
         xl1_u = [10] * q
         xl1_l = [-5] * q
 
-        xl2_u = [0 + 1e-8] * r
-        xl2_l = [np.e] * r
+        xl2_u = [np.e] * r
+        xl2_l = [0 + 1e-8] * r
 
         self.xl = anp.array(xl1_l + xl2_l)
         self.xu = anp.array(xl1_u + xl2_u)
@@ -166,7 +166,7 @@ class SMD2_f(Problem):
 
 
     def _evaluate(self, x, out, *args, **kwargs):
-        # x = check_array(x)
+        x = check_array(x)
 
         xu1 = x[:, np.arange(0, self.p)]
         xu2 = x[:, np.arange(self.p, (self.p + self.r))]
@@ -199,8 +199,8 @@ class SMD3_F(Problem):
         xu2_ubound = [10] * r
         xu2_lbound = [-5] * r
 
-        self.xl = anp.array(xu1_ubound + xu2_ubound)
-        self.xu = anp.array(xu1_lbound + xu2_lbound)
+        self.xu = anp.array(xu1_ubound + xu2_ubound)
+        self.xl = anp.array(xu1_lbound + xu2_lbound)
 
         super().__init__(n_var=self.n_var,
                          n_obj=self.n_obj,
@@ -210,7 +210,7 @@ class SMD3_F(Problem):
                          type_var=anp.double)
 
     def _evaluate(self, x, out, *args, **kwargs):
-        # x = check_array(x)
+        x = check_array(x)
 
         xu1 = x[:, np.arange(0, self.p)]
         xu2 = x[:,  np.arange(self.p, (self.p + self.r))]
@@ -254,7 +254,7 @@ class SMD3_f(Problem):
 
 
     def _evaluate(self, x, out, *args, **kwargs):
-        # x = check_array(x)
+        x = check_array(x)
 
         xu1 = x[:, np.arange(0, self.p)]
         xu2 = x[:, np.arange(self.p, (self.p + self.r))]
@@ -287,8 +287,8 @@ class SMD4_F(Problem):
         xu2_ubound = [1] * r
         xu2_lbound = [-1] * r
 
-        self.xl = anp.array(xu1_ubound + xu2_ubound)
-        self.xu = anp.array(xu1_lbound + xu2_lbound)
+        self.xu = anp.array(xu1_ubound + xu2_ubound)
+        self.xl = anp.array(xu1_lbound + xu2_lbound)
 
         super().__init__(n_var=self.n_var,
                          n_obj=self.n_obj,
@@ -298,7 +298,7 @@ class SMD4_F(Problem):
                          type_var=anp.double)
 
     def _evaluate(self, x, out, *args, **kwargs):
-        # x = check_array(x)
+        x = check_array(x)
 
         xu1 = x[:, np.arange(0, self.p)]
         xu2 = x[:,  np.arange(self.p, (self.p + self.r))]
@@ -342,7 +342,7 @@ class SMD4_f(Problem):
 
 
     def _evaluate(self, x, out, *args, **kwargs):
-        # x = check_array(x)
+        x = check_array(x)
 
         xu1 = x[:, np.arange(0, self.p)]
         xu2 = x[:, np.arange(self.p, (self.p + self.r))]
@@ -375,8 +375,8 @@ class SMD5_F(Problem):
         xu2_ubound = [10] * r
         xu2_lbound = [-5] * r
 
-        self.xl = anp.array(xu1_ubound + xu2_ubound)
-        self.xu = anp.array(xu1_lbound + xu2_lbound)
+        self.xl = anp.array(xu1_lbound + xu2_lbound)
+        self.xu = anp.array(xu1_ubound + xu2_ubound)
 
         super().__init__(n_var=self.n_var,
                          n_obj=self.n_obj,
@@ -386,7 +386,7 @@ class SMD5_F(Problem):
                          type_var=anp.double)
 
     def _evaluate(self, x, out, *args, **kwargs):
-        # x = check_array(x)
+        x = check_array(x)
 
         xu1 = x[:, np.arange(0, self.p)]
         xu2 = x[:,  np.arange(self.p, (self.p + self.r))]
@@ -470,8 +470,8 @@ class SMD6_F(Problem):
         xu2_ubound = [10] * r
         xu2_lbound = [-5] * r
 
-        self.xl = anp.array(xu1_ubound + xu2_ubound)
-        self.xu = anp.array(xu1_lbound + xu2_lbound)
+        self.xl = anp.array(xu1_lbound + xu2_lbound)
+        self.xu = anp.array(xu1_ubound + xu2_ubound)
 
         super().__init__(n_var=self.n_var,
                          n_obj=self.n_obj,
@@ -481,7 +481,7 @@ class SMD6_F(Problem):
                          type_var=anp.double)
 
     def _evaluate(self, x, out, *args, **kwargs):
-        # x = check_array(x)
+        x = check_array(x)
 
         xu1 = x[:, np.arange(0, self.p)]
         xu2 = x[:,  np.arange(self.p, (self.p + self.r))]
@@ -564,8 +564,8 @@ class SMD7_F(Problem):
         xu2_ubound = [1] * r
         xu2_lbound = [-5] * r
 
-        self.xl = anp.array(xu1_ubound + xu2_ubound)
-        self.xu = anp.array(xu1_lbound + xu2_lbound)
+        self.xl = anp.array(xu1_lbound + xu2_lbound)
+        self.xu = anp.array(xu1_ubound + xu2_ubound)
 
         super().__init__(n_var=self.n_var,
                          n_obj=self.n_obj,
@@ -623,7 +623,7 @@ class SMD7_f(Problem):
 
 
     def _evaluate(self, x, out, *args, **kwargs):
-        # x = check_array(x)
+        x = check_array(x)
 
         xu1 = x[:, np.arange(0, self.p)]
         xu2 = x[:, np.arange(self.p, (self.p + self.r))]
@@ -656,8 +656,8 @@ class SMD8_F(Problem):
         xu2_ubound = [10] * r
         xu2_lbound = [-5] * r
 
-        self.xl = anp.array(xu1_ubound + xu2_ubound)
-        self.xu = anp.array(xu1_lbound + xu2_lbound)
+        self.xl = anp.array(xu1_lbound + xu2_lbound)
+        self.xu = anp.array(xu1_ubound + xu2_ubound)
 
         super().__init__(n_var=self.n_var,
                          n_obj=self.n_obj,
@@ -715,7 +715,7 @@ class SMD8_f(Problem):
 
 
     def _evaluate(self, x, out, *args, **kwargs):
-        # x = check_array(x)
+        x = check_array(x)
 
         xu1 = x[:, np.arange(0, self.p)]
         xu2 = x[:, np.arange(self.p, (self.p + self.r))]
