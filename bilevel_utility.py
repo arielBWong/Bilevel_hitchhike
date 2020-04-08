@@ -1,6 +1,7 @@
 import numpy as np
 import matplotlib.pyplot as plt
 from matplotlib.lines import Line2D
+import matplotlib.pyplot as plt
 import optimizer_EI
 from pymop.factory import get_problem_from_func
 from pymop import ZDT1, ZDT2, ZDT3, ZDT4, ZDT6, \
@@ -146,6 +147,7 @@ def search_for_matching_otherlevel_x(x_other, search_iter, n_samples, problem, l
     best_y = np.min(complete_y)
     print(np.min(complete_y))
 
+    '''
     # conduct local search with true evaluation
     # localsearch_x, est_f = localsearch_on_surrogate(train_x_l, complete_y, best_x, eim)
     localsearch_x, est_f = localsearch_on_trueEvaluation(best_x, level, x_other, problem)
@@ -156,6 +158,7 @@ def search_for_matching_otherlevel_x(x_other, search_iter, n_samples, problem, l
     else:
         complete_new_x = np.hstack((localsearch_x, x_other))
 
+    
     localsearch_f = problem.evaluate(complete_new_x, return_values_of=["F"])
 
     print(localsearch_x)
@@ -166,6 +169,8 @@ def search_for_matching_otherlevel_x(x_other, search_iter, n_samples, problem, l
         complete_y = np.vstack((complete_y, localsearch_f))
         return localsearch_x, localsearch_f, train_x, complete_y
 
+    
+    '''
     return np.atleast_2d(best_x), np.atleast_2d(best_y), train_x, complete_y,
 
 
@@ -409,19 +414,22 @@ def save_converge(converge_track, problem_name, method_selection, seed_index):
     np.savetxt(saveName, converge_track, delimiter=',')
 
 def save_converge_plot(converge_track, problem_name, method_selection, seed_index):
-    import matplotlib.pyplot as plt
     working_folder = os.getcwd()
     result_folder = working_folder + '\\bi_output' + '\\' + problem_name[0:4] + '_' + method_selection
+    result_folder = working_folder + '\\bi_ego_output' + '\\' + problem_name[0:4] + '_' + method_selection
+
     if not os.path.isdir(result_folder):
         os.mkdir(result_folder)
     saveName = result_folder + '\\converge_' + str(seed_index) + '.png'
+    if os.path.exists(saveName):
+        os.remove(saveName)
 
-    print()
-
-    plt.plot(converge_track)
-    plt.title(problem_name + ' seed ' + str(seed_index))
-    plt.xlabel('Function evaluation numbers')
-    plt.ylabel('F_u')
+    fig, ax = plt.subplots(nrows=1, ncols=1)
+    ax.plot(converge_track)
+    t = problem_name + ' seed ' + str(seed_index)
+    ax.set_title(t)
+    ax.set_xlabel('Function evaluation numbers')
+    ax.set_ylabel('F_u')
     # plt.show()
     plt.savefig(saveName)
 
@@ -432,7 +440,9 @@ def save_accuracy(problem_u, problem_l, best_y_u, best_y_l, seed_index, method_s
     s = [accuracy_u, accuracy_l]
     working_folder = os.getcwd()
     problem = problem_u.name()[0:4]
-    result_folder = working_folder + '\\bi_output' + '\\' + problem + '_' + method_selection
+    # result_folder = working_folder + '\\bi_output' + '\\' + problem + '_' + method_selection
+    result_folder = working_folder + '\\bi_ego_output' + '\\' + problem + '_' + method_selection
+
     if not os.path.isdir(result_folder):
         os.mkdir(result_folder)
     saveName = result_folder + '\\accuracy_' + str(seed_index) + '.csv'
@@ -478,6 +488,22 @@ def results_process_bestf(BO_target_problems, method_selection):
     h.to_csv(saveName)
     h2.to_csv(saveName2)
 
+
+def save_before_reevaluation(problem_u, problem_l, xu, xl, fu, fl, seed_index,
+                         method_selection):
+    accuracy_u = np.abs(fu - problem_u.opt)
+    accuracy_l = np.abs(fl - problem_l.opt)
+    s = [accuracy_u, accuracy_l]
+    working_folder = os.getcwd()
+    problem = problem_u.name()[0:4]
+    # result_folder = working_folder + '\\bi_output' + '\\' + problem + '_' + method_selection
+    result_folder = working_folder + '\\bi_ego_output' + '\\' + problem + '_' + method_selection
+
+    if not os.path.isdir(result_folder):
+        os.mkdir(result_folder)
+
+    saveName = result_folder + '\\accuracy_before_reevaluation_' + str(seed_index) + '.csv'
+    np.savetxt(saveName, s, delimiter=',')
 
 
 if __name__ == "__main__":

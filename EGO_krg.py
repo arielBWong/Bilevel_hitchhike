@@ -20,14 +20,11 @@ import os
 import copy
 import multiprocessing as mp
 import pygmo as pg
-import utilities
 from pymop.factory import get_uniform_weights
-import EI_krg
-from copy import deepcopy
-import result_processing
 from bilevel_utility import save_for_count_evaluation, localsearch_on_trueEvaluation, \
     surrogate_search_for_nextx, problem_test, save_converge, save_converge_plot,\
-    save_accuracy, results_process_bestf, ea_seach_for_matchingx, search_for_matching_otherlevel_x
+    save_accuracy, results_process_bestf, ea_seach_for_matchingx, search_for_matching_otherlevel_x,\
+    save_before_reevaluation
 
 
 def return_current_extreme(train_x, train_y):
@@ -1558,6 +1555,11 @@ def main_bi_mo(seed_index, target_problem, enable_crossvalidation, method_select
     min_fu_index = np.argmin(y_evaluated_u)
     best_xu_sofar = np.atleast_2d(x_evaluated_u[min_fu_index, 0:target_problem_u.n_levelvar])
     matching_xl = np.atleast_2d(x_evaluated_l[min_fu_index, :])
+    fu = y_evaluated_u[min_fu_index, :]
+    fl = y_evaluated_l[min_fu_index, :]
+
+    save_before_reevaluation(target_problem_u, target_problem_l, best_xu_sofar, matching_xl, fu, fl, seed_index, method_selection )
+
 
     localsearch_xl, localsearch_fl = localsearch_on_trueEvaluation(matching_xl, 'lower', best_xu_sofar, target_problem_l)
 
@@ -1648,7 +1650,7 @@ if __name__ == "__main__":
                 target_problem = BO_target_problems[j: j+2]
                 args.append((seed, target_problem, False, method, method))
     # main_mo_c(1, MO_target_problems[0], False, 'eim', 'eim')
-    # i = 14
+    # i = 0
     # main_bi_mo(0, BO_target_problems[i:i+2], False, 'eim', 'eim')
     # problem_test()
 
