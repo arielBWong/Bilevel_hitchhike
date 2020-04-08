@@ -1411,7 +1411,8 @@ def main_bi_mo(seed_index, target_problem, enable_crossvalidation, method_select
     number_of_initial_samples = 20
     n_iter = 100  # stopping criterion set
     converge_track = []
-    lower_interation = 30
+    folder = 'bi_ego_output'
+    lower_interation = 130
     stop = 80
     start = time.time()
 
@@ -1443,7 +1444,6 @@ def main_bi_mo(seed_index, target_problem, enable_crossvalidation, method_select
     count = 0
     for xu in train_x_u:
         count = count + 1
-        '''
         matching_x, matching_f, _, _ = \
             search_for_matching_otherlevel_x(xu,
                                              lower_interation,
@@ -1456,19 +1456,17 @@ def main_bi_mo(seed_index, target_problem, enable_crossvalidation, method_select
                                              seed_index,
                                              enable_crossvalidation,
                                              method_selection)
-        '''
 
+        '''
         matching_x, matching_f, _, _ = \
             localsearch_for_matching_otherlevel_x(xu,
                                                   150,
                                                   'lower',
                                                   target_problem_l,
                                                   seed_index)
+        '''
+        # evolutionary search for test
         # matching_x, train_x_l, train_y_l = ea_seach_for_matchingx(xu, target_problem_l)
-        # test stop there
-        # no more saving lower level each evaluations
-        # x_evaluated_l = save_for_count_evaluation(xu, train_x_l, 'lower', x_evaluated_l)
-        # y_evaluated_l = np.vstack((y_evaluated_l, train_y_l))
 
         matching_fl = np.append(matching_fl, matching_f)
         matching_xl = np.append(matching_xl, matching_x)
@@ -1508,7 +1506,7 @@ def main_bi_mo(seed_index, target_problem, enable_crossvalidation, method_select
     # find lower level problem complete for this new pop_x
     for i in range(n_iter):
         print('iteration %d' % i)
-        '''
+
         matching_xl, matching_fl, _, _ = \
             search_for_matching_otherlevel_x(searched_xu,
                                              lower_interation,
@@ -1528,6 +1526,7 @@ def main_bi_mo(seed_index, target_problem, enable_crossvalidation, method_select
                                                   'lower',
                                                   target_problem_l,
                                                   seed_index)
+        '''
 
         # combine matching xl to xu for true evaluation
         matching_xl = np.atleast_2d(matching_xl)
@@ -1573,7 +1572,7 @@ def main_bi_mo(seed_index, target_problem, enable_crossvalidation, method_select
     fu = y_evaluated_u[min_fu_index, :]
     fl = y_evaluated_l[min_fu_index, :]
 
-    save_before_reevaluation(target_problem_u, target_problem_l, best_xu_sofar, matching_xl, fu, fl, seed_index, method_selection )
+    save_before_reevaluation(target_problem_u, target_problem_l, best_xu_sofar, matching_xl, fu, fl, seed_index, method_selection,folder )
 
 
     localsearch_xl, localsearch_fl = localsearch_on_trueEvaluation(matching_xl, 100, 'lower', best_xu_sofar, target_problem_l)
@@ -1593,9 +1592,9 @@ def main_bi_mo(seed_index, target_problem, enable_crossvalidation, method_select
     print('overall time used: %0.4f mins' % duration)
 
 
-    save_accuracy(target_problem_u, target_problem_l, new_fu[0,0], new_fl[0,0], seed_index, method_selection)
+    save_accuracy(target_problem_u, target_problem_l, new_fu[0,0], new_fl[0,0], seed_index, method_selection, folder)
     # save_converge(converge_track, target_problem_u.name(), method_selection, seed_index)
-    save_converge_plot(converge_track, target_problem_u.name(), method_selection, seed_index)
+    save_converge_plot(converge_track, target_problem_u.name(), method_selection, seed_index, folder)
 
 
     return None
@@ -1665,15 +1664,15 @@ if __name__ == "__main__":
                 target_problem = BO_target_problems[j: j+2]
                 args.append((seed, target_problem, False, method, method))
     # main_mo_c(1, MO_target_problems[0], False, 'eim', 'eim')
-    # i = 0
-    # main_bi_mo(0, BO_target_problems[i:i+2], False, 'eim', 'eim')
+    i = 0
+    main_bi_mo(0, BO_target_problems[i:i+2], False, 'eim', 'eim')
     # problem_test()
 
     # num_workers = 6
     # pool = mp.Pool(processes=num_workers)
     # pool.starmap(main_bi_mo, ([arg for arg in args]))
 
-    results_process_bestf(BO_target_problems, 'eim')
+    #results_process_bestf(BO_target_problems, 'eim')
 
     ''' 
     target_problems = [branin.new_branin_5(),

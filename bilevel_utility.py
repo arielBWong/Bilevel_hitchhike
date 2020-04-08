@@ -142,11 +142,11 @@ def search_for_matching_otherlevel_x(x_other, search_iter, n_samples, problem, l
     best_y_index = np.argmin(complete_y)
     best_x = train_x[best_y_index, :]
     np.set_printoptions(precision=2)
-    print(best_x)
+    # print(best_x)
     best_x = np.atleast_2d(best_x)
     np.set_printoptions(precision=2)
     best_y = np.min(complete_y)
-    print(np.min(complete_y))
+    # print(np.min(complete_y))
 
     '''
     # conduct local search with true evaluation
@@ -425,11 +425,11 @@ def save_converge(converge_track, problem_name, method_selection, seed_index):
     saveName = result_folder + '\\converge_' + str(seed_index) + '.csv'
     np.savetxt(saveName, converge_track, delimiter=',')
 
-def save_converge_plot(converge_track, problem_name, method_selection, seed_index):
+def save_converge_plot(converge_track, problem_name, method_selection, seed_index, folder):
     working_folder = os.getcwd()
     result_folder = working_folder + '\\bi_output' + '\\' + problem_name[0:4] + '_' + method_selection
     result_folder = working_folder + '\\bi_ego_output' + '\\' + problem_name[0:4] + '_' + method_selection
-    result_folder = working_folder + '\\bi_local_output' + '\\' + problem_name[0:4] + '_' + method_selection
+    result_folder = working_folder + '\\' + folder + '\\' + problem_name[0:4] + '_' + method_selection
 
     if not os.path.isdir(result_folder):
         os.mkdir(result_folder)
@@ -446,15 +446,13 @@ def save_converge_plot(converge_track, problem_name, method_selection, seed_inde
     # plt.show()
     plt.savefig(saveName)
 
-def save_accuracy(problem_u, problem_l, best_y_u, best_y_l, seed_index, method_selection):
+def save_accuracy(problem_u, problem_l, best_y_u, best_y_l, seed_index, method_selection, folder):
     accuracy_u = np.abs(best_y_u - problem_u.opt)
     accuracy_l = np.abs(best_y_l - problem_l.opt)
     s = [accuracy_u, accuracy_l]
     working_folder = os.getcwd()
     problem = problem_u.name()[0:4]
-    # result_folder = working_folder + '\\bi_output' + '\\' + problem + '_' + method_selection
-    # result_folder = working_folder + '\\bi_ego_output' + '\\' + problem + '_' + method_selection
-    result_folder = working_folder + '\\bi_local_output' + '\\' + problem + '_' + method_selection
+    result_folder = working_folder + '\\' + folder + '\\' + problem + '_' + method_selection
 
     if not os.path.isdir(result_folder):
         os.mkdir(result_folder)
@@ -613,7 +611,7 @@ def outer_process(BO_target_problems, method_selection):
 
 
 def save_before_reevaluation(problem_u, problem_l, xu, xl, fu, fl, seed_index,
-                         method_selection):
+                         method_selection, folder):
     accuracy_u = np.abs(fu - problem_u.opt)
     accuracy_l = np.abs(fl - problem_l.opt)
     s = [accuracy_u, accuracy_l]
@@ -621,7 +619,7 @@ def save_before_reevaluation(problem_u, problem_l, xu, xl, fu, fl, seed_index,
     problem = problem_u.name()[0:4]
     # result_folder = working_folder + '\\bi_output' + '\\' + problem + '_' + method_selection
     # result_folder = working_folder + '\\bi_ego_output' + '\\' + problem + '_' + method_selection
-    result_folder = working_folder + '\\bi_local_output' + '\\' + problem + '_' + method_selection
+    result_folder = working_folder + '\\' + folder + '\\' + problem + '_' + method_selection
 
     if not os.path.isdir(result_folder):
         os.mkdir(result_folder)
