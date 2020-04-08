@@ -1,3 +1,9 @@
+# Bilevel Setting
+The paper introducing SMD is really a bummer... so many typos and wrong messages.
+For bilevel problems,  design is to make upper and lower level problem interact with each other. 
+Both levels are minimization problems. To bring lower level variable to its minimum, the corresponding xu need also to be bring to its minimum.
+
+
 # EGO
 Surrogate model optimization with Gaussian regressor
 ![Code flow](https://github.com/arielBWong/EGO/blob/master/images/struct.jpg)
