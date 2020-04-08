@@ -24,7 +24,7 @@ from pymop.factory import get_uniform_weights
 from bilevel_utility import save_for_count_evaluation, localsearch_on_trueEvaluation, \
     surrogate_search_for_nextx, problem_test, save_converge, save_converge_plot,\
     save_accuracy, results_process_bestf, ea_seach_for_matchingx, search_for_matching_otherlevel_x,\
-    save_before_reevaluation
+    save_before_reevaluation, localsearch_for_matching_otherlevel_x
 
 
 def return_current_extreme(train_x, train_y):
@@ -1443,6 +1443,7 @@ def main_bi_mo(seed_index, target_problem, enable_crossvalidation, method_select
     count = 0
     for xu in train_x_u:
         count = count + 1
+        '''
         matching_x, matching_f, _, _ = \
             search_for_matching_otherlevel_x(xu,
                                              lower_interation,
@@ -1455,8 +1456,14 @@ def main_bi_mo(seed_index, target_problem, enable_crossvalidation, method_select
                                              seed_index,
                                              enable_crossvalidation,
                                              method_selection)
+        '''
 
-
+        matching_x, matching_f, _, _ = \
+            localsearch_for_matching_otherlevel_x(xu,
+                                                  150,
+                                                  'lower',
+                                                  target_problem_l,
+                                                  seed_index)
         # matching_x, train_x_l, train_y_l = ea_seach_for_matchingx(xu, target_problem_l)
         # test stop there
         # no more saving lower level each evaluations
@@ -1501,6 +1508,7 @@ def main_bi_mo(seed_index, target_problem, enable_crossvalidation, method_select
     # find lower level problem complete for this new pop_x
     for i in range(n_iter):
         print('iteration %d' % i)
+        '''
         matching_xl, matching_fl, _, _ = \
             search_for_matching_otherlevel_x(searched_xu,
                                              lower_interation,
@@ -1513,6 +1521,13 @@ def main_bi_mo(seed_index, target_problem, enable_crossvalidation, method_select
                                              seed_index,
                                              enable_crossvalidation,
                                              method_selection)
+        '''
+        matching_xl, matching_fl, _, _ = \
+            localsearch_for_matching_otherlevel_x(searched_xu,
+                                                  150,
+                                                  'lower',
+                                                  target_problem_l,
+                                                  seed_index)
 
         # combine matching xl to xu for true evaluation
         matching_xl = np.atleast_2d(matching_xl)
@@ -1561,7 +1576,7 @@ def main_bi_mo(seed_index, target_problem, enable_crossvalidation, method_select
     save_before_reevaluation(target_problem_u, target_problem_l, best_xu_sofar, matching_xl, fu, fl, seed_index, method_selection )
 
 
-    localsearch_xl, localsearch_fl = localsearch_on_trueEvaluation(matching_xl, 'lower', best_xu_sofar, target_problem_l)
+    localsearch_xl, localsearch_fl = localsearch_on_trueEvaluation(matching_xl, 100, 'lower', best_xu_sofar, target_problem_l)
 
     new_complete_x = np.hstack((np.atleast_2d(best_xu_sofar), np.atleast_2d(localsearch_xl)))
     new_fl = target_problem_l.evaluate(new_complete_x, return_values_of=["F"])
@@ -1654,11 +1669,11 @@ if __name__ == "__main__":
     # main_bi_mo(0, BO_target_problems[i:i+2], False, 'eim', 'eim')
     # problem_test()
 
-    num_workers = 6
-    pool = mp.Pool(processes=num_workers)
-    pool.starmap(main_bi_mo, ([arg for arg in args]))
+    # num_workers = 6
+    # pool = mp.Pool(processes=num_workers)
+    # pool.starmap(main_bi_mo, ([arg for arg in args]))
 
-    # results_process_bestf(BO_target_problems, 'eim')
+    results_process_bestf(BO_target_problems, 'eim')
 
     ''' 
     target_problems = [branin.new_branin_5(),

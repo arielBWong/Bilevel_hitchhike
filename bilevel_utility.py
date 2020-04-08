@@ -101,6 +101,7 @@ def normalization_with_self(y):
     max_y = np.max(y, axis=0)
     return (y - min_y)/(max_y - min_y)
 
+
 def search_for_matching_otherlevel_x(x_other, search_iter, n_samples, problem, level, eim, eim_pop, eim_gen,  seed_index, enable_crossvalidation, method_selection):
     train_x, train_y, cons_y = init_xy(n_samples, problem, seed_index,
                                              **{'problem_type': 'bilevel'})
@@ -174,6 +175,19 @@ def search_for_matching_otherlevel_x(x_other, search_iter, n_samples, problem, l
     return np.atleast_2d(best_x), np.atleast_2d(best_y), train_x, complete_y,
 
 
+def localsearch_for_matching_otherlevel_x(x_other, max_eval, search_level, problem, seed_index):
+    # random init for x
+    dimensions = problem.n_levelvar
+    start_x = np.random.rand(1, dimensions)
+    start_x = problem.xl + start_x * np.fabs(problem.xu - problem.xl)
+    x_other = np.atleast_2d(x_other)
+    start_x = np.atleast_2d(start_x)
+    localsearch_x, f = localsearch_on_trueEvaluation(start_x, max_eval, search_level, x_other, problem)
+    localsearch_x = np.atleast_2d(localsearch_x)
+
+    return localsearch_x, f, None, None
+
+
 def localsearch_on_surrogate(train_x_l, complete_y,  ankor_x, problem):
     # need to update for multiobj!!!
     # conduct local search on the best surrogate
@@ -225,7 +239,7 @@ def localsearch_on_surrogate(train_x_l, complete_y,  ankor_x, problem):
     return pop_x, pop_f
 
 
-def localsearch_on_trueEvaluation(ankor_x, level, other_x, true_problem):
+def localsearch_on_trueEvaluation(ankor_x, max_eval, level, other_x, true_problem):
     ankor_x = np.atleast_2d(ankor_x)
     ankor_x = check_array(ankor_x)
 
@@ -239,7 +253,7 @@ def localsearch_on_trueEvaluation(ankor_x, level, other_x, true_problem):
 
     bounds = scipy.optimize.Bounds(lb=true_problem.xl, ub=true_problem.xu)
     opt_res = scipy.optimize.minimize(
-         obj_func, ankor_x, method="L-BFGS-B", options={'maxfun': 100}, jac=False,
+         obj_func, ankor_x, method="L-BFGS-B", options={'maxfun': max_eval}, jac=False,
          bounds=bounds)
 
     #opt_res = scipy.optimize.minimize(
@@ -403,8 +417,6 @@ def bi_level_compensate_callback(x, level, compensate):
     x = bi_level_compensate(level, np.atleast_2d(compensate), x, True)
     return x
 
-
-
 def save_converge(converge_track, problem_name, method_selection, seed_index):
     working_folder = os.getcwd()
     result_folder = working_folder + '\\bi_output' + '\\' + problem_name[0:4] + '_' + method_selection
@@ -417,6 +429,7 @@ def save_converge_plot(converge_track, problem_name, method_selection, seed_inde
     working_folder = os.getcwd()
     result_folder = working_folder + '\\bi_output' + '\\' + problem_name[0:4] + '_' + method_selection
     result_folder = working_folder + '\\bi_ego_output' + '\\' + problem_name[0:4] + '_' + method_selection
+    result_folder = working_folder + '\\bi_local_output' + '\\' + problem_name[0:4] + '_' + method_selection
 
     if not os.path.isdir(result_folder):
         os.mkdir(result_folder)
@@ -433,7 +446,6 @@ def save_converge_plot(converge_track, problem_name, method_selection, seed_inde
     # plt.show()
     plt.savefig(saveName)
 
-
 def save_accuracy(problem_u, problem_l, best_y_u, best_y_l, seed_index, method_selection):
     accuracy_u = np.abs(best_y_u - problem_u.opt)
     accuracy_l = np.abs(best_y_l - problem_l.opt)
@@ -441,7 +453,8 @@ def save_accuracy(problem_u, problem_l, best_y_u, best_y_l, seed_index, method_s
     working_folder = os.getcwd()
     problem = problem_u.name()[0:4]
     # result_folder = working_folder + '\\bi_output' + '\\' + problem + '_' + method_selection
-    result_folder = working_folder + '\\bi_ego_output' + '\\' + problem + '_' + method_selection
+    # result_folder = working_folder + '\\bi_ego_output' + '\\' + problem + '_' + method_selection
+    result_folder = working_folder + '\\bi_local_output' + '\\' + problem + '_' + method_selection
 
     if not os.path.isdir(result_folder):
         os.mkdir(result_folder)
@@ -464,9 +477,12 @@ def results_process_bestf(BO_target_problems, method_selection):
         # print(problem_name)
         working_folder = os.getcwd()
         result_folder = working_folder + '\\bi_output' + '\\' + problem_name + '_' + method_selection
+        result_folder = working_folder + '\\bi_ego_output' + '\\' + problem_name + '_' + method_selection
+        result_folder = working_folder + '\\bi_local_output' + '\\' + problem_name + '_' + method_selection
 
         accuracy_data = []
         for seed_index in range(11):
+            saveName = result_folder + '\\accuracy_before_evaluation' + str(seed_index) + '.csv'
             saveName = result_folder + '\\accuracy_' + str(seed_index) + '.csv'
             data = np.loadtxt(saveName, delimiter=',')
             accuracy_data = np.append(accuracy_data, data)
@@ -479,14 +495,121 @@ def results_process_bestf(BO_target_problems, method_selection):
     mean_data = np.atleast_2d(mean_data).reshape(-1, 2)
     median_data = np.atleast_2d(median_data).reshape(-1, 2)
 
-    h = pd.DataFrame(mean_data, columns=['ul','ll'], index=pname_list)
-    h2 = pd.DataFrame(median_data, columns=['ul','ll'], index=pname_list)
+    h = pd.DataFrame(mean_data, columns=['ul', 'll'], index=pname_list)
+    h2 = pd.DataFrame(median_data, columns=['ul', 'll'], index=pname_list)
     working_folder = os.getcwd()
     result_folder = working_folder + '\\bi_process'
-    saveName = result_folder + '\\accuracy_mean.csv'
-    saveName2 = result_folder + '\\accuracy_median.csv'
+    saveName = result_folder + '\\local_accuracy_mean.csv'
+    saveName2 = result_folder + '\\local_accuracy_median.csv'
     h.to_csv(saveName)
     h2.to_csv(saveName2)
+
+
+def results_process_before_after(BO_target_problems, method_selection, alg_folder, accuracy_name):
+    import pandas as pd
+    n = len(BO_target_problems)
+    mean_data = []
+    median_data = []
+    pname_list =[]
+    for j in np.arange(0, n, 2):
+        target_problem = BO_target_problems[j]
+        target_problem = eval(target_problem)
+        problem_name = target_problem.name()
+        problem_name = problem_name[0:4]
+        pname_list.append(problem_name)
+        # print(problem_name)
+        working_folder = os.getcwd()
+        result_folder = working_folder + '\\' + alg_folder + '\\' + problem_name + '_' + method_selection
+
+        accuracy_data = []
+        for seed_index in range(11):
+            saveName = result_folder + '\\' + accuracy_name + '_' + str(seed_index) + '.csv'
+            data = np.loadtxt(saveName, delimiter=',')
+            accuracy_data = np.append(accuracy_data, data)
+        accuracy_data = np.atleast_2d(accuracy_data).reshape(-1, 2)
+        accuracy_mean = np.mean(accuracy_data, axis=0)
+        accuracy_median = np.median(accuracy_data, axis=0)
+        mean_data = np.append(mean_data, accuracy_mean)
+        median_data = np.append(median_data, accuracy_median)
+
+    mean_data = np.atleast_2d(mean_data).reshape(-1, 2)
+    median_data = np.atleast_2d(median_data).reshape(-1, 2)
+
+    return median_data
+def process_before_after(BO_target_problems, method_selection, alg_folder):
+
+    n = len(BO_target_problems)
+    fu_before = []
+    fu_after = []
+    fl_before = []
+    fl_after = []
+    pname_list =[]
+    for j in np.arange(0, n, 2):
+        target_problem = BO_target_problems[j]
+        target_problem = eval(target_problem)
+        problem_name = target_problem.name()
+        problem_name = problem_name[0:4]
+        pname_list.append(problem_name)
+        # print(problem_name)
+        working_folder = os.getcwd()
+        result_folder = working_folder + '\\' + alg_folder + '\\' + problem_name + '_' + method_selection
+
+        accuracy_data = []
+        for seed_index in range(11):
+            saveName = result_folder + '\\accuracy_before_reevaluation_' + str(seed_index) + '.csv'
+            data = np.loadtxt(saveName, delimiter=',')
+            accuracy_data = np.append(accuracy_data, data[0])
+
+        # just decide which seed to use
+        xu_median_index = np.argsort(accuracy_data)[5]
+
+        accuracy_median = accuracy_data[xu_median_index]
+        fu_before = np.append(fu_before, accuracy_median)
+
+        saveName = result_folder + '\\accuracy_' + str(xu_median_index) + '.csv'
+        data = np.loadtxt(saveName, delimiter=',')
+        fu_after = np.append(fu_after, data[0])
+        fl_after = np.append(fl_after, data[1])
+
+        saveName = result_folder + '\\accuracy_before_reevaluation_' + str(xu_median_index) + '.csv'
+        data = np.loadtxt(saveName, delimiter=',')
+        fl_before = np.append(fl_before, data[1])
+
+
+    return np.atleast_2d(fu_before).reshape(-1, 1), \
+           np.atleast_2d(fu_after).reshape(-1, 1),\
+           np.atleast_2d(fl_before).reshape(-1, 1),\
+           np.atleast_2d(fl_after).reshape(-1, 1)
+
+
+def outer_process(BO_target_problems, method_selection):
+    import pandas as pd
+
+    alg_folders = ['bi_ego_output', 'bi_local_output'] # 'bi_output',
+    accuracy_names = ['accuracy', 'accuracy_before_reevaluation']
+    # upper - 0/lower - 1
+    level = 1
+    save_u = np.atleast_2d(np.zeros((int(len(BO_target_problems)/2), 1)))
+    save_l = np.atleast_2d(np.zeros((int(len(BO_target_problems) / 2), 1)))
+
+    for folder in alg_folders:
+        before_u, after_u, before_l, after_l = \
+            process_before_after(BO_target_problems, method_selection, folder) # 0-upper, 1-lower
+        save = np.hstack((before_u, after_u, before_l, after_l ))
+
+        h = pd.DataFrame(save,
+                         columns=[# 'Combine before', 'Combine after',
+                                 'upper level before', 'upper level after',
+                                 'lower level before', 'lower level after'],
+                         index=['SMD1', 'SMD2', 'SMD3', 'SMD4',
+                                'SMD5', 'SMD6', 'SMD7', 'SMD8'])
+        working_folder = os.getcwd()
+        result_folder = working_folder + '\\bi_process'
+        savename = result_folder + '\\before_after_compare_' + folder + '.csv'
+        h.to_csv(savename)
+
+
+
 
 
 def save_before_reevaluation(problem_u, problem_l, xu, xl, fu, fl, seed_index,
@@ -497,7 +620,8 @@ def save_before_reevaluation(problem_u, problem_l, xu, xl, fu, fl, seed_index,
     working_folder = os.getcwd()
     problem = problem_u.name()[0:4]
     # result_folder = working_folder + '\\bi_output' + '\\' + problem + '_' + method_selection
-    result_folder = working_folder + '\\bi_ego_output' + '\\' + problem + '_' + method_selection
+    # result_folder = working_folder + '\\bi_ego_output' + '\\' + problem + '_' + method_selection
+    result_folder = working_folder + '\\bi_local_output' + '\\' + problem + '_' + method_selection
 
     if not os.path.isdir(result_folder):
         os.mkdir(result_folder)
@@ -506,8 +630,56 @@ def save_before_reevaluation(problem_u, problem_l, xu, xl, fu, fl, seed_index,
     np.savetxt(saveName, s, delimiter=',')
 
 
+def multiple_algorithm_results_combine():
+    import pandas as pd
+
+    working_folder = os.getcwd()
+    result_folder = working_folder + '\\bi_process'
+    combined = result_folder + '\\accuracy_median.csv'
+    ego = result_folder + '\\ego_accuracy_median.csv'
+    local = result_folder + '\\local_accuracy_median.csv'
+
+    combined_data = pd.read_csv(combined)
+    ego_data = pd.read_csv(ego)
+    local_data = pd.read_csv(local)
+    n_problem = len(combined_data.index)
+    print(combined_data['ll'])
+    print(np.array(combined_data['ll']))
+
+    # create combined matrix
+    level = 'll'
+    compare_u = []
+    compare_u = np.append(compare_u, np.array(combined_data[level]))
+    compare_u = np.append(compare_u, np.array(ego_data[level]))
+    compare_u = np.append(compare_u, np.array(local_data[level]))
+    compare_u = np.atleast_2d(compare_u).reshape(n_problem, -1, order='F')
+
+    # re-write into file
+    h = pd.DataFrame(compare_u, columns=['combined', 'ego_only', 'local_search_only'], index=combined_data.index)
+    saveName = result_folder + '\\' + level + '_compare.csv'
+    h.to_csv(saveName)
+
+
 if __name__ == "__main__":
-    results_process_bestf()
+    BO_target_problems = ['SMD.SMD1_F(1,1,2)',
+                          'SMD.SMD1_f(1,1,2)',
+                          'SMD.SMD2_F(1,1,2)',
+                          'SMD.SMD2_f(1,1,2)',
+                          'SMD.SMD3_F(1,1,2)',
+                          'SMD.SMD3_f(1,1,2)',
+                          'SMD.SMD4_F(1,1,2)',
+                          'SMD.SMD4_f(1,1,2)',
+                          'SMD.SMD5_F(1,1,2)',
+                          'SMD.SMD5_f(1,1,2)',
+                          'SMD.SMD6_F(1,1,0,2)',
+                          'SMD.SMD6_f(1,1,0,2)',
+                          'SMD.SMD7_F(1,1,2)',
+                          'SMD.SMD7_f(1,1,2)',
+                          'SMD.SMD8_F(1,1,2)',
+                          'SMD.SMD8_f(1,1,2)',
+                          ]
+    outer_process(BO_target_problems, 'eim')
+
 
 
 
