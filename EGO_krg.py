@@ -1446,6 +1446,7 @@ def main_bi_mo(seed_index, target_problem, enable_crossvalidation, method_select
     count = 0
     for xu in train_x_u:
         count = count + 1
+
         matching_x, matching_f, n_fev_local, _, _ = \
             search_for_matching_otherlevel_x(xu,
                                              lower_interation,
@@ -1684,7 +1685,7 @@ if __name__ == "__main__":
     # main_bi_mo(0, BO_target_problems[i:i+2], False, 'eim', 'eim')
     # problem_test()
 
-    num_workers = 6
+    num_workers = 22
     pool = mp.Pool(processes=num_workers)
     pool.starmap(main_bi_mo, ([arg for arg in args]))
 

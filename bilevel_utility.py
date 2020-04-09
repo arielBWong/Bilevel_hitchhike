@@ -459,6 +459,49 @@ def results_process_bestf(BO_target_problems, method_selection):
     h.to_csv(saveName)
     h2.to_csv(saveName2)
 
+def combine_fev(BO_target_problems, method_selection):
+    import pandas as pd
+    n = len(BO_target_problems)
+
+    median_data = []
+
+    folders = ['bi_output', 'bi_local_output']
+    mean_cross_strategies = []
+    for folder in folders:
+        pname_list = []
+        mean_smds = []
+        for j in np.arange(0, n, 2):
+            target_problem = BO_target_problems[j]
+            target_problem = eval(target_problem)
+            problem_name = target_problem.name()
+            problem_name = problem_name[0:4]
+            pname_list.append(problem_name)
+            # print(problem_name)
+            working_folder = os.getcwd()
+            # result_folder = working_folder + '\\bi_output' + '\\' + problem_name + '_' + method_selection
+            result_folder = working_folder + '\\' + folder + '\\' + problem_name + '_' + method_selection
+            # result_folder = working_folder + '\\bi_local_output' + '\\' + problem_name + '_' + method_selection
+
+            n_fev = []
+            for seed_index in range(11):
+                # saveName = result_folder + '\\accuracy_before_evaluation' + str(seed_index) + '.csv'
+                saveName = result_folder + '\\ll_nfev' + str(seed_index) + '.csv'
+                data = np.loadtxt(saveName, delimiter=',')
+                n_fev = np.append(n_fev, data)
+            mean_nfev = np.median(n_fev)
+            mean_smds = np.append(mean_smds, mean_nfev)
+
+        mean_cross_strategies = np.append(mean_cross_strategies, mean_smds)
+
+
+    mean_cross_strategies = np.atleast_2d(mean_cross_strategies).reshape(-1, 2)
+
+    h = pd.DataFrame(mean_cross_strategies, columns=['Combined', 'Local only'], index=pname_list)
+    working_folder = os.getcwd()
+    result_folder = working_folder + '\\bi_process'
+    saveName = result_folder + '\\compare_fev_median.csv'
+    h.to_csv(saveName)
+
 
 def results_process_before_after(BO_target_problems, method_selection, alg_folder, accuracy_name):
     import pandas as pd
@@ -593,7 +636,7 @@ def save_function_evaluation(nfev, problem, seed_index, method_selection, folder
         os.mkdir(result_folder)
 
     saveName = result_folder + '\\ll_nfev' + str(seed_index) + '.csv'
-    np.savetxt(saveName, nfev, delimiter=',')
+    np.savetxt(saveName, [nfev], delimiter=',')
 
 def multiple_algorithm_results_combine():
     import pandas as pd
@@ -645,7 +688,8 @@ if __name__ == "__main__":
                           ]
     # outer_process(BO_target_problems, 'eim')
     # results_process_bestf(BO_target_problems, 'eim')
-    multiple_algorithm_results_combine()
+    # multiple_algorithm_results_combine()
+    combine_fev(BO_target_problems, 'eim')
 
 
 
