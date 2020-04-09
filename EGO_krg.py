@@ -24,7 +24,7 @@ from pymop.factory import get_uniform_weights
 from bilevel_utility import save_for_count_evaluation, localsearch_on_trueEvaluation, \
     surrogate_search_for_nextx, problem_test, save_converge, save_converge_plot,\
     save_accuracy, results_process_bestf, ea_seach_for_matchingx, search_for_matching_otherlevel_x,\
-    save_before_reevaluation, localsearch_for_matching_otherlevel_x
+    save_before_reevaluation, localsearch_for_matching_otherlevel_x, save_function_evaluation
 
 
 def return_current_extreme(train_x, train_y):
@@ -1411,9 +1411,11 @@ def main_bi_mo(seed_index, target_problem, enable_crossvalidation, method_select
     number_of_initial_samples = 20
     n_iter = 100  # stopping criterion set
     converge_track = []
-    folder = 'bi_ego_output'
-    lower_interation = 130
+    folder = 'bi_output'
+    lower_interation = 30
     stop = 80
+    ul_nfev = 0
+    ll_nfev = 0
     start = time.time()
 
     # init upper level variables, bilevel only init xu no evaluation is done
@@ -1444,7 +1446,7 @@ def main_bi_mo(seed_index, target_problem, enable_crossvalidation, method_select
     count = 0
     for xu in train_x_u:
         count = count + 1
-        matching_x, matching_f, _, _ = \
+        matching_x, matching_f, n_fev_local, _, _ = \
             search_for_matching_otherlevel_x(xu,
                                              lower_interation,
                                              number_of_initial_samples,
@@ -1456,15 +1458,17 @@ def main_bi_mo(seed_index, target_problem, enable_crossvalidation, method_select
                                              seed_index,
                                              enable_crossvalidation,
                                              method_selection)
+        # combined scheme number of function evaluation mainly comes from ll matching seach
 
         '''
-        matching_x, matching_f, _, _ = \
+        matching_x, matching_f, n_fev_local, _, _ = \
             localsearch_for_matching_otherlevel_x(xu,
                                                   150,
                                                   'lower',
                                                   target_problem_l,
                                                   seed_index)
         '''
+        ll_nfev += n_fev_local
         # evolutionary search for test
         # matching_x, train_x_l, train_y_l = ea_seach_for_matchingx(xu, target_problem_l)
 
@@ -1477,16 +1481,19 @@ def main_bi_mo(seed_index, target_problem, enable_crossvalidation, method_select
     complete_x_u = np.hstack((train_x_u, matching_xl))
     complete_y_u = target_problem_u.evaluate(complete_x_u, return_values_of=["F"])
 
-    # count true evaluations
+    # save true evaluations
     x_evaluated_u = np.vstack((x_evaluated_u, complete_x_u))
     y_evaluated_u = np.vstack((y_evaluated_u, complete_y_u))
+
     # before entering evaluation, adjusting save, delete first row
     x_evaluated_u = np.delete(x_evaluated_u, obj=0, axis=0)
     y_evaluated_u = np.delete(y_evaluated_u, obj=0, axis=0)
 
+    # save matching ll variables and ll function value
     x_evaluated_l = np.vstack((x_evaluated_l, matching_xl))
     y_evaluated_l = np.vstack((y_evaluated_l, matching_fl))
 
+    # delete first row
     x_evaluated_l = np.delete(x_evaluated_l, obj=0, axis=0)
     y_evaluated_l = np.delete(y_evaluated_l, obj=0, axis=0)
 
@@ -1507,7 +1514,7 @@ def main_bi_mo(seed_index, target_problem, enable_crossvalidation, method_select
     for i in range(n_iter):
         print('iteration %d' % i)
 
-        matching_xl, matching_fl, _, _ = \
+        matching_xl, matching_fl, n_fev_local, _, _ = \
             search_for_matching_otherlevel_x(searched_xu,
                                              lower_interation,
                                              number_of_initial_samples,
@@ -1519,14 +1526,17 @@ def main_bi_mo(seed_index, target_problem, enable_crossvalidation, method_select
                                              seed_index,
                                              enable_crossvalidation,
                                              method_selection)
+
+
         '''
-        matching_xl, matching_fl, _, _ = \
+        matching_xl, matching_fl, n_fev_local, _, _ = \
             localsearch_for_matching_otherlevel_x(searched_xu,
                                                   150,
                                                   'lower',
                                                   target_problem_l,
                                                   seed_index)
         '''
+        ll_nfev += n_fev_local
 
         # combine matching xl to xu for true evaluation
         matching_xl = np.atleast_2d(matching_xl)
@@ -1574,8 +1584,9 @@ def main_bi_mo(seed_index, target_problem, enable_crossvalidation, method_select
 
     save_before_reevaluation(target_problem_u, target_problem_l, best_xu_sofar, matching_xl, fu, fl, seed_index, method_selection,folder )
 
-
-    localsearch_xl, localsearch_fl = localsearch_on_trueEvaluation(matching_xl, 100, 'lower', best_xu_sofar, target_problem_l)
+    # conduct a final local search based on best_xu_sofar
+    localsearch_xl, localsearch_fl, local_fev = localsearch_on_trueEvaluation(matching_xl, 100, 'lower', best_xu_sofar, target_problem_l)
+    ll_nfev += local_fev
 
     new_complete_x = np.hstack((np.atleast_2d(best_xu_sofar), np.atleast_2d(localsearch_xl)))
     new_fl = target_problem_l.evaluate(new_complete_x, return_values_of=["F"])
@@ -1591,11 +1602,16 @@ def main_bi_mo(seed_index, target_problem, enable_crossvalidation, method_select
     duration = (end - start) / 60
     print('overall time used: %0.4f mins' % duration)
 
+    if new_fu[0, 0] < fu:
+        final_fu = new_fu[0, 0]
+        final_fl = new_fl[0, 0]
+    else:
+        final_fu = fu
+        final_fl = fl
 
-    save_accuracy(target_problem_u, target_problem_l, new_fu[0,0], new_fl[0,0], seed_index, method_selection, folder)
-    # save_converge(converge_track, target_problem_u.name(), method_selection, seed_index)
+    save_accuracy(target_problem_u, target_problem_l, final_fu, final_fl, seed_index, method_selection, folder)
     save_converge_plot(converge_track, target_problem_u.name(), method_selection, seed_index, folder)
-
+    save_function_evaluation(ll_nfev, target_problem_l, seed_index, method_selection, folder)
 
     return None
 
@@ -1664,15 +1680,15 @@ if __name__ == "__main__":
                 target_problem = BO_target_problems[j: j+2]
                 args.append((seed, target_problem, False, method, method))
     # main_mo_c(1, MO_target_problems[0], False, 'eim', 'eim')
-    i = 0
-    main_bi_mo(0, BO_target_problems[i:i+2], False, 'eim', 'eim')
+    # i = 0
+    # main_bi_mo(0, BO_target_problems[i:i+2], False, 'eim', 'eim')
     # problem_test()
 
-    # num_workers = 6
-    # pool = mp.Pool(processes=num_workers)
-    # pool.starmap(main_bi_mo, ([arg for arg in args]))
+    num_workers = 6
+    pool = mp.Pool(processes=num_workers)
+    pool.starmap(main_bi_mo, ([arg for arg in args]))
 
-    #results_process_bestf(BO_target_problems, 'eim')
+
 
     ''' 
     target_problems = [branin.new_branin_5(),

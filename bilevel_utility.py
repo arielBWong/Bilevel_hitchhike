@@ -148,31 +148,18 @@ def search_for_matching_otherlevel_x(x_other, search_iter, n_samples, problem, l
     best_y = np.min(complete_y)
     # print(np.min(complete_y))
 
-    '''
     # conduct local search with true evaluation
     # localsearch_x, est_f = localsearch_on_surrogate(train_x_l, complete_y, best_x, eim)
-    localsearch_x, est_f = localsearch_on_trueEvaluation(best_x, level, x_other, problem)
+    localsearch_x, localsearch_f, n_fev = localsearch_on_trueEvaluation(best_x, 100, level, x_other, problem)
 
-    localsearch_x = np.atleast_2d(localsearch_x)
-    if level == 'lower':
-        complete_new_x = np.hstack((x_other, localsearch_x))
-    else:
-        complete_new_x = np.hstack((localsearch_x, x_other))
+    n_fev = n_fev + search_iter + n_samples
 
-    
-    localsearch_f = problem.evaluate(complete_new_x, return_values_of=["F"])
-
-    print(localsearch_x)
-    print('local search est f %.4f: '% est_f)
-    print('local search true f %.4f: '% localsearch_f)
     if localsearch_f < best_y:
         train_x = np.vstack((train_x, localsearch_x))
         complete_y = np.vstack((complete_y, localsearch_f))
-        return localsearch_x, localsearch_f, train_x, complete_y
+        return localsearch_x, localsearch_f, n_fev, train_x, complete_y
 
-    
-    '''
-    return np.atleast_2d(best_x), np.atleast_2d(best_y), train_x, complete_y,
+    return np.atleast_2d(best_x), np.atleast_2d(best_y), n_fev, train_x, complete_y,
 
 
 def localsearch_for_matching_otherlevel_x(x_other, max_eval, search_level, problem, seed_index):
@@ -182,10 +169,10 @@ def localsearch_for_matching_otherlevel_x(x_other, max_eval, search_level, probl
     start_x = problem.xl + start_x * np.fabs(problem.xu - problem.xl)
     x_other = np.atleast_2d(x_other)
     start_x = np.atleast_2d(start_x)
-    localsearch_x, f = localsearch_on_trueEvaluation(start_x, max_eval, search_level, x_other, problem)
+    localsearch_x, f, nfev = localsearch_on_trueEvaluation(start_x, max_eval, search_level, x_other, problem)
     localsearch_x = np.atleast_2d(localsearch_x)
 
-    return localsearch_x, f, None, None
+    return localsearch_x, f, nfev, None, None
 
 
 def localsearch_on_surrogate(train_x_l, complete_y,  ankor_x, problem):
@@ -262,39 +249,9 @@ def localsearch_on_trueEvaluation(ankor_x, max_eval, level, other_x, true_proble
 
     print('number of function evaluations: %d '% opt_res.nfev)
 
-    x, f = opt_res.x, opt_res.fun
-    return x, f
+    x, f, num_fev = opt_res.x, opt_res.fun, opt_res.nfev
+    return x, f, num_fev
 
-    '''
-    para = {'add_info': ankor_x,
-            'callback': bi_level_compensate_callback,
-            'level': level,
-            'other_x': other_x,
-            }
-
-    x_bounds = np.vstack((true_problem.xl, true_problem.xu)).T.tolist()  # for ea, column direction
-    recordFlag = False
-    pop_test = None
-    mut = 0.9
-
-    crossp = 0.1
-    popsize = 20
-    its = 50
-
-    pop_x, pop_f, pop_g, archive_x, archive_f, archive_g, (record_f, record_x) = \
-        optimizer_EI.optimizer(true_problem,
-                               true_problem.n_obj,
-                               true_problem.n_constr,
-                               x_bounds,
-                               recordFlag,
-                               pop_test,
-                               mut,
-                               crossp,
-                               popsize,
-                               its,
-                               **para)
-    return pop_x[0], pop_f[0]
-    '''
 
 def surrogate_search_for_nextx(train_x, train_y, eim, eim_pop, eim_gen, method_selection, enable_crossvalidation):
     train_x_norm, x_mean, x_std = norm_by_zscore(train_x)
@@ -474,13 +431,13 @@ def results_process_bestf(BO_target_problems, method_selection):
         pname_list.append(problem_name)
         # print(problem_name)
         working_folder = os.getcwd()
-        result_folder = working_folder + '\\bi_output' + '\\' + problem_name + '_' + method_selection
+        # result_folder = working_folder + '\\bi_output' + '\\' + problem_name + '_' + method_selection
         result_folder = working_folder + '\\bi_ego_output' + '\\' + problem_name + '_' + method_selection
-        result_folder = working_folder + '\\bi_local_output' + '\\' + problem_name + '_' + method_selection
+        # result_folder = working_folder + '\\bi_local_output' + '\\' + problem_name + '_' + method_selection
 
         accuracy_data = []
         for seed_index in range(11):
-            saveName = result_folder + '\\accuracy_before_evaluation' + str(seed_index) + '.csv'
+            # saveName = result_folder + '\\accuracy_before_evaluation' + str(seed_index) + '.csv'
             saveName = result_folder + '\\accuracy_' + str(seed_index) + '.csv'
             data = np.loadtxt(saveName, delimiter=',')
             accuracy_data = np.append(accuracy_data, data)
@@ -497,8 +454,8 @@ def results_process_bestf(BO_target_problems, method_selection):
     h2 = pd.DataFrame(median_data, columns=['ul', 'll'], index=pname_list)
     working_folder = os.getcwd()
     result_folder = working_folder + '\\bi_process'
-    saveName = result_folder + '\\local_accuracy_mean.csv'
-    saveName2 = result_folder + '\\local_accuracy_median.csv'
+    saveName = result_folder + '\\ego_accuracy_mean.csv'
+    saveName2 = result_folder + '\\ego_accuracy_median.csv'
     h.to_csv(saveName)
     h2.to_csv(saveName2)
 
@@ -534,6 +491,7 @@ def results_process_before_after(BO_target_problems, method_selection, alg_folde
     median_data = np.atleast_2d(median_data).reshape(-1, 2)
 
     return median_data
+
 def process_before_after(BO_target_problems, method_selection, alg_folder):
 
     n = len(BO_target_problems)
@@ -583,7 +541,7 @@ def process_before_after(BO_target_problems, method_selection, alg_folder):
 def outer_process(BO_target_problems, method_selection):
     import pandas as pd
 
-    alg_folders = ['bi_ego_output', 'bi_local_output'] # 'bi_output',
+    alg_folders = ['bi_output', 'bi_local_output'] # 'bi_output', , 'bi_ego_output',
     accuracy_names = ['accuracy', 'accuracy_before_reevaluation']
     # upper - 0/lower - 1
     level = 1
@@ -617,8 +575,6 @@ def save_before_reevaluation(problem_u, problem_l, xu, xl, fu, fl, seed_index,
     s = [accuracy_u, accuracy_l]
     working_folder = os.getcwd()
     problem = problem_u.name()[0:4]
-    # result_folder = working_folder + '\\bi_output' + '\\' + problem + '_' + method_selection
-    # result_folder = working_folder + '\\bi_ego_output' + '\\' + problem + '_' + method_selection
     result_folder = working_folder + '\\' + folder + '\\' + problem + '_' + method_selection
 
     if not os.path.isdir(result_folder):
@@ -627,6 +583,17 @@ def save_before_reevaluation(problem_u, problem_l, xu, xl, fu, fl, seed_index,
     saveName = result_folder + '\\accuracy_before_reevaluation_' + str(seed_index) + '.csv'
     np.savetxt(saveName, s, delimiter=',')
 
+
+def save_function_evaluation(nfev, problem, seed_index, method_selection, folder):
+    working_folder = os.getcwd()
+    problem = problem.name()[0:4]
+    result_folder = working_folder + '\\' + folder + '\\' + problem + '_' + method_selection
+
+    if not os.path.isdir(result_folder):
+        os.mkdir(result_folder)
+
+    saveName = result_folder + '\\ll_nfev' + str(seed_index) + '.csv'
+    np.savetxt(saveName, nfev, delimiter=',')
 
 def multiple_algorithm_results_combine():
     import pandas as pd
@@ -641,11 +608,11 @@ def multiple_algorithm_results_combine():
     ego_data = pd.read_csv(ego)
     local_data = pd.read_csv(local)
     n_problem = len(combined_data.index)
-    print(combined_data['ll'])
-    print(np.array(combined_data['ll']))
+    # print(combined_data['ll'])
+    # print(np.array(combined_data['ll']))
 
     # create combined matrix
-    level = 'll'
+    level = 'ul'
     compare_u = []
     compare_u = np.append(compare_u, np.array(combined_data[level]))
     compare_u = np.append(compare_u, np.array(ego_data[level]))
@@ -676,7 +643,9 @@ if __name__ == "__main__":
                           'SMD.SMD8_F(1,1,2)',
                           'SMD.SMD8_f(1,1,2)',
                           ]
-    outer_process(BO_target_problems, 'eim')
+    # outer_process(BO_target_problems, 'eim')
+    # results_process_bestf(BO_target_problems, 'eim')
+    multiple_algorithm_results_combine()
 
 
 
