@@ -15,5 +15,12 @@
                           "SMD.SMD7_f(1,1,2)",
                           "SMD.SMD8_F(1,1,2)",
                           "SMD.SMD8_f(1,1,2)"],
-"methods_ops": ["eim"]
+"methods_ops": ["eim"],
+"alg_settings": {
+                    "lower_interaction": 30,
+                    "stop": 100,
+                    "number_of_initial_samples": 20,
+                    "num_pop": 100,
+                    "num_gen": 100
+                    }
 }

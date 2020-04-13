@@ -1398,7 +1398,7 @@ def main_mo_c(seed_index, target_problem, enable_crossvalidation, method_selecti
 
 
 
-def main_bi_mo(seed_index, target_problem, enable_crossvalidation, method_selection, run_signature):
+def main_bi_mo(seed_index, target_problem, enable_crossvalidation, method_selection, exp_settings):
     # this following one line is for work around 1d plot in multiple-processing settings
     mp.freeze_support()
     np.random.seed(seed_index)
@@ -1409,12 +1409,12 @@ def main_bi_mo(seed_index, target_problem, enable_crossvalidation, method_select
     print('Problem %s, seed %d' % (target_problem_l.name(), seed_index))
 
     # number_of_initial_samples = 11 * n_vals - 1
-    number_of_initial_samples = 20
+    number_of_initial_samples = exp_settings['number_of_initial_samples']
     n_iter = 100  # stopping criterion set
     converge_track = []
     folder = 'bi_output'
-    lower_interation = 30
-    stop = 80
+    lower_interation = exp_settings['lower_interaction']
+    stop = exp_settings['stop']
     ul_nfev = 0
     ll_nfev = 0
     start = time.time()
@@ -1432,8 +1432,8 @@ def main_bi_mo(seed_index, target_problem, enable_crossvalidation, method_select
 
     # for each upper level variable, search for its corresponding lower variable for compensation
     num_u = train_x_u.shape[0]
-    num_pop = 100
-    num_gen = 100
+    num_pop = exp_settings['num_pop']
+    num_gen = exp_settings['num_gen']
 
     # circumstantial varaible for saving
     x_evaluated_u = np.atleast_2d(np.zeros((1, target_problem_u.n_var)))
@@ -1618,7 +1618,7 @@ def main_bi_mo(seed_index, target_problem, enable_crossvalidation, method_select
     return None
 
 
-def paral_args_bi(target_problems, seed_max, cross_val, methods_ops):
+def paral_args_bi(target_problems, seed_max, cross_val, methods_ops, alg_settings):
     # prepare args for bilevel para processing
     # list of tuples
     args = []
@@ -1627,7 +1627,7 @@ def paral_args_bi(target_problems, seed_max, cross_val, methods_ops):
         for j in np.arange(0, n, 2):
             for method in methods_ops:
                 target_problem = target_problems[j: j + 2]
-                args.append((seed, target_problem, cross_val, method, method))
+                args.append((seed, target_problem, cross_val, method, method, alg_settings))
     return args
 
 
@@ -1649,17 +1649,18 @@ if __name__ == "__main__":
          hyp = json.load(data_file)
     target_problems = hyp['BO_target_problems']
     methods_ops = hyp['methods_ops']
+    alg_settings = hyp['alg_settings']
 
     para_run = False
     if para_run:
         seed_max = 11
-        args = paral_args_bi(target_problems, seed_max, False,methods_ops)
+        args = paral_args_bi(target_problems, seed_max, False, methods_ops, alg_settings)
         num_workers = 22
         pool = mp.Pool(processes=num_workers)
         pool.starmap(main_bi_mo, ([arg for arg in args]))
     else:
         i = 0
-        main_bi_mo(0, target_problems[i:i+2], False, 'eim', 'eim')
+        main_bi_mo(0, target_problems[i:i+2], False, 'eim', alg_settings)
 
 
 
