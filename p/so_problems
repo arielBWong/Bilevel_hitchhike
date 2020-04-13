@@ -1,0 +1,10 @@
+{
+"target_problems":["branin.new_branin_5()",
+                       "Gomez3.Gomez3()",
+                       "Mystery.Mystery()",
+                       "Reverse_Mystery.ReverseMystery()",
+                       "SHCBc.SHCBc()",
+                       "Haupt_schewefel.Haupt_schewefel()",
+                       "HS100.HS100()",
+                       "GPc.GPc()"]
+}

@@ -20,6 +20,7 @@ import os
 import copy
 import multiprocessing as mp
 import pygmo as pg
+import json
 from pymop.factory import get_uniform_weights
 from bilevel_utility import save_for_count_evaluation, localsearch_on_trueEvaluation, \
     surrogate_search_for_nextx, problem_test, save_converge, save_converge_plot,\
@@ -1617,91 +1618,48 @@ def main_bi_mo(seed_index, target_problem, enable_crossvalidation, method_select
     return None
 
 
+def paral_args_bi(target_problems, seed_max, cross_val, methods_ops):
+    # prepare args for bilevel para processing
+    # list of tuples
+    args = []
+    n = len(target_problems)
+    for seed in range(0, seed_max):
+        for j in np.arange(0, n, 2):
+            for method in methods_ops:
+                target_problem = target_problems[j: j + 2]
+                args.append((seed, target_problem, cross_val, method, method))
+    return args
+
+
+def para_args_si(target_problems, seed_max, cross_val, method_ops):
+    args = []
+    for seed in range(seed_max):
+        for target_problem in target_problems:
+            for method in method_ops:
+                args.append((seed, target_problem, cross_val, method, method))
+    return args
+
 
 if __name__ == "__main__":
 
+    # when dealing with different problems
+    # load different problem json files
+    problems_json = 'p/bi_problems'
+    with open(problems_json, 'r') as data_file:
+         hyp = json.load(data_file)
+    target_problems = hyp['BO_target_problems']
+    methods_ops = hyp['methods_ops']
 
-
-
-    MO_target_problems = [
-                          # 'BNH()',
-                          #  'TNK()',
-                          # 'WeldedBeam()'
-                          # 'ZDT1(n_var=6)',
-                          # 'ZDT2(n_var=6)',
-                          # 'ZDT3(n_var=6)',
-                          #'WFG.WFG_1(n_var=2, n_obj=2, K=1)',
-                          # 'WFG.WFG_2(n_var=6, n_obj=2, K=4)',
-                          # 'WFG.WFG_3(n_var=6, n_obj=2, K=4)',
-                           # 'WFG.WFG_4(n_var=6, n_obj=2, K=4)',
-                         #'WFG.WFG_5(n_var=6, n_obj=2, K=4)',
-                          #'WFG.WFG_6(n_var=6, n_obj=2, K=4)',
-                          #'WFG.WFG_7(n_var=6, n_obj=2, K=4)',
-                          #'WFG.WFG_8(n_var=6, n_obj=2, K=4)',
-                          #'WFG.WFG_9(n_var=6, n_obj=2, K=4)',
-                           # 'DTLZ1(n_var=6, n_obj=2)',
-                          #  'DTLZ2(n_var=6, n_obj=2)',
-                         # 'DTLZs.DTLZ5(n_var=6, n_obj=2)',
-                      #'DTLZs.DTLZ7(n_var=6, n_obj=2)',
-                          # 'iDTLZ.IDTLZ1(n_var=6, n_obj=2)',
-                          # 'iDTLZ.IDTLZ2(n_var=6, n_obj=2)',
-                        ]
-    BO_target_problems = ['SMD.SMD1_F(1,1,2)',
-                          'SMD.SMD1_f(1,1,2)',
-                          'SMD.SMD2_F(1,1,2)',
-                          'SMD.SMD2_f(1,1,2)',
-                          'SMD.SMD3_F(1,1,2)',
-                          'SMD.SMD3_f(1,1,2)',
-                          'SMD.SMD4_F(1,1,2)',
-                          'SMD.SMD4_f(1,1,2)',
-                          'SMD.SMD5_F(1,1,2)',
-                          'SMD.SMD5_f(1,1,2)',
-                          'SMD.SMD6_F(1,1,0,2)',
-                          'SMD.SMD6_f(1,1,0,2)',
-                          'SMD.SMD7_F(1,1,2)',
-                          'SMD.SMD7_f(1,1,2)',
-                          'SMD.SMD8_F(1,1,2)',
-                          'SMD.SMD8_f(1,1,2)',
-                          ]
-
-
-
-    run_sig = ['eim']  # 'hv_r3']  #'eim_nd', 'eim', 'eim_r', 'eim_r3']
-    methods_ops = ['eim']   # 'hv_r3']  # 'eim_nd', 'eim', 'eim_r', 'eim_r3']  #, 'hv', 'eim_r', 'hvr',  'eim','eim_nd' ]
-    args = []
-    for seed in range(1, 12):
-        for target_problem in MO_target_problems:
-            for method in methods_ops:
-                args.append((seed, target_problem, False, method, method))
-
-    n = len(BO_target_problems)
-    for seed in range(0, 11):
-        for j in np.arange(0, n, 2):
-            for method in methods_ops:
-                target_problem = BO_target_problems[j: j+2]
-                args.append((seed, target_problem, False, method, method))
-    # main_mo_c(1, MO_target_problems[0], False, 'eim', 'eim')
-    # i = 0
-    # main_bi_mo(0, BO_target_problems[i:i+2], False, 'eim', 'eim')
-    # problem_test()
-
-    num_workers = 22
-    pool = mp.Pool(processes=num_workers)
-    pool.starmap(main_bi_mo, ([arg for arg in args]))
-
-
-
-    ''' 
-    target_problems = [branin.new_branin_5(),
-                       Gomez3.Gomez3(),
-                       Mystery.Mystery(),
-                       Reverse_Mystery.ReverseMystery(),
-                       SHCBc.SHCBc(),
-                       Haupt_schewefel.Haupt_schewefel(),
-                       HS100.HS100(),
-                       GPc.GPc()]
-    '''
-
+    para_run = False
+    if para_run:
+        seed_max = 11
+        args = paral_args_bi(target_problems, seed_max, False,methods_ops)
+        num_workers = 22
+        pool = mp.Pool(processes=num_workers)
+        pool.starmap(main_bi_mo, ([arg for arg in args]))
+    else:
+        i = 0
+        main_bi_mo(0, target_problems[i:i+2], False, 'eim', 'eim')
 
 
 

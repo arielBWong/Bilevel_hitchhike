@@ -19,14 +19,9 @@ from surrogate_problems import branin, GPc, Gomez3, Mystery, Reverse_Mystery, SH
                                MO_linearTest, single_krg_optim, WFG, iDTLZ, DTLZs, SMD, EI, Surrogate_test
 
 import os
-import copy
-import multiprocessing as mp
-import pygmo as pg
-import utilities
-from pymop.factory import get_uniform_weights
-import EI_krg
+import json
 from copy import deepcopy
-import result_processing
+
 
 
 def norm_by_zscore(a, axis=0, ddof=0):
@@ -689,12 +684,32 @@ if __name__ == "__main__":
     # outer_process(BO_target_problems, 'eim')
     # results_process_bestf(BO_target_problems, 'eim')
     # multiple_algorithm_results_combine()
-    combine_fev(BO_target_problems, 'eim')
+    # combine_fev(BO_target_problems, 'eim')
+    problems_bi = 'p/bi_problems'
+
+    with open(problems_bi, 'r') as data_file:
+         hyp = json.load(data_file)
+    print(hyp)
 
 
 
 
 
+
+    '''
+    score=[1,2,3,4,5]
+
+    with open("file.json", 'w') as f:
+        # indent=2 is not needed but makes the file more
+        # human-readable for more complicated data
+ 
+        json.dump(score, f, indent=2)
+    
+    with open("file.json", 'r') as f:
+        score = json.load(f)
+
+    print(score)
+    '''
 
 
 
