@@ -25,7 +25,7 @@ from pymop.factory import get_uniform_weights
 from bilevel_utility import save_for_count_evaluation, localsearch_on_trueEvaluation, \
     surrogate_search_for_nextx, problem_test, save_converge, save_converge_plot,\
     save_accuracy, results_process_bestf, ea_seach_for_matchingx, search_for_matching_otherlevel_x,\
-    save_before_reevaluation, localsearch_for_matching_otherlevel_x, save_function_evaluation
+    save_before_reevaluation, localsearch_for_matching_otherlevel_x, save_function_evaluation, return_feasible
 
 
 def return_current_extreme(train_x, train_y):
@@ -1440,6 +1440,8 @@ def main_bi_mo(seed_index, target_problem, enable_crossvalidation, method_select
     x_evaluated_l = np.atleast_2d(np.zeros((1, target_problem_l.n_levelvar)))
     y_evaluated_u = np.atleast_2d(np.zeros((1, target_problem_u.n_obj)))
     y_evaluated_l = np.atleast_2d(np.zeros((1, target_problem_l.n_obj)))
+    c_evaluated_u = np.atleast_2d(np.zeros((1, target_problem_u.n_constr)))
+    c_evaluated_l = np.atleast_2d(np.zeros((1, target_problem_l.n_constr)))
 
     # record matching f
     matching_xl = []
@@ -1481,11 +1483,23 @@ def main_bi_mo(seed_index, target_problem, enable_crossvalidation, method_select
 
     # true evaluation
     complete_x_u = np.hstack((train_x_u, matching_xl))
-    complete_y_u = target_problem_u.evaluate(complete_x_u, return_values_of=["F"])
+    # complete_y_u = target_problem_u.evaluate(complete_x_u, return_values_of=["F"])
+
+    # include constraint
+    if target_problem_u.n_constr > 0:
+        complete_y_u, complete_c_u = target_problem_u.evaluate(complete_x_u, return_values_of=["F", "G"])
+    else:
+        complete_y_u = target_problem_u.evaluate(complete_x_u, return_values_of=["F"])
+        complete_c_u = None
 
     # save true evaluations
     x_evaluated_u = np.vstack((x_evaluated_u, complete_x_u))
     y_evaluated_u = np.vstack((y_evaluated_u, complete_y_u))
+
+    # include constraints
+    if target_problem_u.n_constr > 0:
+        c_evaluated_u = np.vstack(c_evaluated_u, complete_c_u)
+        c_evaluated_u = np.delete(c_evaluated_u, obj=0, axis=0)
 
     # before entering evaluation, adjusting save, delete first row
     x_evaluated_u = np.delete(x_evaluated_u, obj=0, axis=0)
@@ -1503,9 +1517,11 @@ def main_bi_mo(seed_index, target_problem, enable_crossvalidation, method_select
     eim_u = EI.EIM(target_problem_u.n_levelvar, n_obj=1, n_constr=target_problem_u.n_constr,
                    upper_bound=target_problem_u.xu,
                    lower_bound=target_problem_u.xl)
+    # before entering iteration
     searched_xu = \
         surrogate_search_for_nextx(train_x_u,
                                    complete_y_u,
+                                   complete_c_u,
                                    eim_u,
                                    num_pop,
                                    num_gen,
@@ -1543,12 +1559,19 @@ def main_bi_mo(seed_index, target_problem, enable_crossvalidation, method_select
         # combine matching xl to xu for true evaluation
         matching_xl = np.atleast_2d(matching_xl)
         new_complete_xu = np.hstack((searched_xu, matching_xl))
-        new_complete_yu = target_problem_u.evaluate(new_complete_xu, return_values_of=["F"])
+        if target_problem_u.n_constr > 0:
+            new_complete_yu, new_complete_cu = target_problem_u.evaluate(new_complete_xu, return_values_of=["F", "G"])
+            c_evaluated_u = np.vstack((c_evaluated_u, new_complete_cu))
+            complete_c_u = np.vstack((complete_c_u, new_complete_cu))
+        else:
+            new_complete_yu = target_problem_u.evaluate(new_complete_xu, return_values_of=["F"])
+            new_complete_cu = None
         print('iteration %d, yu true evaluated: %f' % (i, new_complete_yu))
 
         # save training data compete lower and upper
         x_evaluated_u = np.vstack((x_evaluated_u, new_complete_xu))
         y_evaluated_u = np.vstack((y_evaluated_u, new_complete_yu))
+
         x_evaluated_l = np.vstack((x_evaluated_l, matching_xl))
         y_evaluated_l = np.vstack((y_evaluated_l, matching_fl))
 
@@ -1564,6 +1587,7 @@ def main_bi_mo(seed_index, target_problem, enable_crossvalidation, method_select
         searched_xu = \
             surrogate_search_for_nextx(train_x_u,
                                        complete_y_u,
+                                       complete_c_u,
                                        eim_u,
                                        num_pop,
                                        num_gen,
@@ -1578,6 +1602,11 @@ def main_bi_mo(seed_index, target_problem, enable_crossvalidation, method_select
 
 
     # conduct a local search based on fl
+    if target_problem_u.n_constr > 0:
+        y_evaluated_u, x_evaluated_u = return_feasible(c_evaluated_u, y_evaluated_u, x_evaluated_u)
+        y_evaluated_u = np.atleast_2d(y_evaluated_u).reshape(-1, target_problem_u.n_obj)
+        x_evaluated_u = np.atleast_2d(x_evaluated_u).reshape(-1, target_problem_u.n_var)
+
     min_fu_index = np.argmin(y_evaluated_u)
     best_xu_sofar = np.atleast_2d(x_evaluated_u[min_fu_index, 0:target_problem_u.n_levelvar])
     matching_xl = np.atleast_2d(x_evaluated_l[min_fu_index, :])

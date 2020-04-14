@@ -109,13 +109,19 @@ def search_for_matching_otherlevel_x(x_other, search_iter, n_samples, problem, l
     else:
         complete_x = np.hstack((train_x, xother_expand))
 
-    complete_y = problem.evaluate(complete_x, return_values_of=["F"])
+    if problem.n_constr > 0:
+        complete_y, complete_c = problem.evaluate(complete_x, return_values_of=["F", "G"])
+    else:
+        complete_y = problem.evaluate(complete_x, return_values_of=["F"])
+        complete_c = None
+
 
     for i in range(search_iter):
         new_x = \
             surrogate_search_for_nextx(
                 train_x,
                 complete_y,
+                complete_c,
                 eim,
                 eim_pop,
                 eim_gen,
@@ -130,16 +136,25 @@ def search_for_matching_otherlevel_x(x_other, search_iter, n_samples, problem, l
         else:
             complete_new_x = np.hstack((new_x, x_other))
 
-        complete_new_y = problem.evaluate(complete_new_x, return_values_of=["F"])
+        if problem.n_constr > 0:
+            complete_new_y, complete_new_c = problem.evaluate(complete_new_x, return_values_of=["F", "G"])
+            complete_c = np.vstack((complete_c, complete_new_c))
+        else:
+            complete_new_y = problem.evaluate(complete_new_x, return_values_of=["F"])
+
         complete_y = np.vstack((complete_y, complete_new_y))
+
         # print(np.min(complete_y))
+
+    if problem.n_constr > 0:
+        complete_y, train_x = return_feasible(complete_c, complete_y, train_x)
 
     best_y_index = np.argmin(complete_y)
     best_x = train_x[best_y_index, :]
-    np.set_printoptions(precision=2)
+    # np.set_printoptions(precision=2)
     # print(best_x)
     best_x = np.atleast_2d(best_x)
-    np.set_printoptions(precision=2)
+    # np.set_printoptions(precision=2)
     best_y = np.min(complete_y)
     # print(np.min(complete_y))
 
@@ -233,33 +248,65 @@ def localsearch_on_trueEvaluation(ankor_x, max_eval, level, other_x, true_proble
             x = np.hstack((x, other_x))
         return true_problem.evaluate(x,  return_values_of=["F"])
 
+    def cons_func(x):
+        x = np.atleast_2d(x)
+        if level == 'lower':
+            x = np.hstack((other_x, x))
+        else:
+            x = np.hstack((x, other_x))
+        return true_problem.evaluate(x, return_values_of=["G"])
+
     bounds = scipy.optimize.Bounds(lb=true_problem.xl, ub=true_problem.xu)
-    opt_res = scipy.optimize.minimize(
-         obj_func, ankor_x, method="L-BFGS-B", options={'maxfun': max_eval}, jac=False,
-         bounds=bounds)
+    if true_problem.n_constr > 0:
+        optimization_res = scipy.optimize.minimize(
+            obj_func, ankor_x, method="SLSQP", options={'maxiter': max_eval},
+            constraint={'type': 'ineq', 'fun': cons_func}, jac=False, bounds=bounds)
+    else:
+        optimization_res = scipy.optimize.minimize(
+            obj_func, ankor_x, method="SLSQP", options={'maxiter': max_eval}, jac=False,
+            bounds=bounds)
 
-    #opt_res = scipy.optimize.minimize(
-    #    obj_func, ankor_x, method="SLSQP", options={'maxfun': 100},jac=False,
-    #    bounds=bounds)
+    print('number of function evaluations: %d '% optimization_res.nfev)
 
-    print('number of function evaluations: %d '% opt_res.nfev)
-
-    x, f, num_fev = opt_res.x, opt_res.fun, opt_res.nfev
+    x, f, num_fev = optimization_res.x, optimization_res.fun, optimization_res.nfev
     return x, f, num_fev
 
+def return_feasible(solutions_c, solutions_y, solution_x):
+    sample_n = solutions_c.shape[0]
+    a = np.linspace(0, sample_n - 1, sample_n, dtype=int)
+    solutions_c[solutions_c <= 0] = 0
+    solutions_c_violation = solutions_c.sum(axis=1)
+    infeasible = np.nonzero(solutions_c_violation)
+    feasible = np.setdiff1d(a, infeasible)
 
-def surrogate_search_for_nextx(train_x, train_y, eim, eim_pop, eim_gen, method_selection, enable_crossvalidation):
+    return solutions_y[feasible, :], solution_x[feasible, :]
+
+
+def surrogate_search_for_nextx(train_x, train_y, train_c, eim, eim_pop, eim_gen, method_selection, enable_crossvalidation):
     train_x_norm, x_mean, x_std = norm_by_zscore(train_x)
     train_y_norm, y_mean, y_std = norm_by_zscore(train_y)
 
     train_x_norm = np.atleast_2d(train_x_norm)
     train_y_norm = np.atleast_2d(train_y_norm)
 
-    krg, krg_g = cross_val_krg(train_x_norm, train_y_norm, None, enable_crossvalidation)
+    if train_c is not None:
+        train_c_norm, c_mean, c_std = norm_by_zscore(train_c)
+        train_c_norm = np.atleast_2d(train_c_norm)
+    else:
+        train_c_norm = None
+
+    krg, krg_g = cross_val_krg(train_x_norm, train_y_norm, train_c_norm, enable_crossvalidation)
 
     xbound_l = convert_with_zscore(eim.xl, x_mean, x_std)
     xbound_u = convert_with_zscore(eim.xu, x_mean, x_std)
     x_bounds = np.vstack((xbound_l, xbound_u)).T.tolist()  # for ea, column direction
+
+    # construct feasible for para
+    if train_c is not None:
+        feasible_norm, _ = return_feasible(train_c, train_y_norm, train_x_norm)
+    else:
+        feasible_norm = np.array([])
+
 
     para = {'train_y': train_y,
             'norm_train_y': train_y_norm,
@@ -267,7 +314,7 @@ def surrogate_search_for_nextx(train_x, train_y, eim, eim_pop, eim_gen, method_s
             'krg_g': krg_g,
             'nadir': None,
             'ideal': None,
-            'feasible': np.array([]),
+            'feasible': np.array(feasible_norm),
             'ei_method': method_selection}
 
     recordFlag = False
@@ -603,9 +650,6 @@ def outer_process(BO_target_problems, method_selection):
         h.to_csv(savename)
 
 
-
-
-
 def save_before_reevaluation(problem_u, problem_l, xu, xl, fu, fl, seed_index,
                          method_selection, folder):
     accuracy_u = np.abs(fu - problem_u.opt)
@@ -664,32 +708,25 @@ def multiple_algorithm_results_combine():
 
 
 if __name__ == "__main__":
-    BO_target_problems = ['SMD.SMD1_F(1,1,2)',
-                          'SMD.SMD1_f(1,1,2)',
-                          'SMD.SMD2_F(1,1,2)',
-                          'SMD.SMD2_f(1,1,2)',
-                          'SMD.SMD3_F(1,1,2)',
-                          'SMD.SMD3_f(1,1,2)',
-                          'SMD.SMD4_F(1,1,2)',
-                          'SMD.SMD4_f(1,1,2)',
-                          'SMD.SMD5_F(1,1,2)',
-                          'SMD.SMD5_f(1,1,2)',
-                          'SMD.SMD6_F(1,1,0,2)',
-                          'SMD.SMD6_f(1,1,0,2)',
-                          'SMD.SMD7_F(1,1,2)',
-                          'SMD.SMD7_f(1,1,2)',
-                          'SMD.SMD8_F(1,1,2)',
-                          'SMD.SMD8_f(1,1,2)',
-                          ]
-    # outer_process(BO_target_problems, 'eim')
-    # results_process_bestf(BO_target_problems, 'eim')
-    # multiple_algorithm_results_combine()
-    # combine_fev(BO_target_problems, 'eim')
-    problems_bi = 'p/bi_problems'
+    # problem
+    test_f = Surrogate_test.f()
 
-    with open(problems_bi, 'r') as data_file:
-         hyp = json.load(data_file)
-    print(hyp)
+    def obj_func(x):
+        return test_f.evaluate(x, return_values_of=["F"])
+
+    def cons_func(x):
+        return -1 * (x - 0.5)
+
+    constraints = {'type': 'ineq', 'fun': cons_func}
+
+    bounds = scipy.optimize.Bounds(lb=test_f.xl, ub=test_f.xu)
+    opt_res = scipy.optimize.minimize(
+        obj_func, [0.4], method="SLSQP", constraints=constraints, jac=False,
+        bounds=bounds)
+
+    print(opt_res)
+
+
 
 
 
