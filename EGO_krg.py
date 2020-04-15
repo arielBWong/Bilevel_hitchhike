@@ -25,7 +25,8 @@ from pymop.factory import get_uniform_weights
 from bilevel_utility import save_for_count_evaluation, localsearch_on_trueEvaluation, \
     surrogate_search_for_nextx, problem_test, save_converge, save_converge_plot,\
     save_accuracy, results_process_bestf, ea_seach_for_matchingx, search_for_matching_otherlevel_x,\
-    save_before_reevaluation, localsearch_for_matching_otherlevel_x, save_function_evaluation, return_feasible
+    save_before_reevaluation, localsearch_for_matching_otherlevel_x, save_function_evaluation, return_feasible,\
+    hybridsearch_on_trueEvaluation
 
 
 def return_current_extreme(train_x, train_y):
@@ -1616,7 +1617,9 @@ def main_bi_mo(seed_index, target_problem, enable_crossvalidation, method_select
     save_before_reevaluation(target_problem_u, target_problem_l, best_xu_sofar, matching_xl, fu, fl, seed_index, method_selection,folder )
 
     # conduct a final local search based on best_xu_sofar
-    localsearch_xl, localsearch_fl, local_fev = localsearch_on_trueEvaluation(matching_xl, 100, 'lower', best_xu_sofar, target_problem_l)
+    # localsearch_xl, localsearch_fl, local_fev = localsearch_on_trueEvaluation(matching_xl, 100, 'lower', best_xu_sofar, target_problem_l)
+    localsearch_xl, localsearch_fl, local_fev = hybridsearch_on_trueEvaluation(matching_xl, 'lower', best_xu_sofar, target_problem_l)
+
     ll_nfev += local_fev
 
     new_complete_x = np.hstack((np.atleast_2d(best_xu_sofar), np.atleast_2d(localsearch_xl)))
@@ -1627,7 +1630,6 @@ def main_bi_mo(seed_index, target_problem, enable_crossvalidation, method_select
     x_evaluated_u = np.vstack((x_evaluated_u, new_complete_x))
     x_evaluated_l = np.vstack((x_evaluated_l, np.atleast_2d(matching_xl)))
     converge_track.append(new_fu[0, 0])
-
 
     end = time.time()
     duration = (end - start) / 60

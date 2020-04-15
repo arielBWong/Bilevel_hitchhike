@@ -153,8 +153,8 @@ def optimizer_DE(problem, nobj, ncon, bounds, recordFlag, pop_test, F, CR, NP, i
     # Check input variables
     VTR = -np.inf
     refresh = 0
-    F = 0.8
-    CR = 0.8
+    # F = 0.8
+    # CR = 0.8
     strategy = 6
     use_vectorize = 1
 
@@ -175,10 +175,25 @@ def optimizer_DE(problem, nobj, ncon, bounds, recordFlag, pop_test, F, CR, NP, i
     # values between the min and max values of the parameters
 
     min_b, max_b = np.asarray(bounds).T
+    diff = np.fabs(min_b - max_b)
     pop = np.random.rand(NP, dimensions)
-    pop_x = min_b + pop * (max_b - min_b)
+    pop_x = min_b + pop * diff
     # for test
     # pop_x = np.loadtxt('pop.csv', delimiter=',')
+
+
+    if 'add_info' in kwargs.keys():
+        print(kwargs['add_info'])
+        guide_x = kwargs['add_info']
+    if 'callback' in kwargs.keys():
+        bilevel_fix = kwargs['callback']
+        level = kwargs['level']
+        compensate_x = kwargs['other_x']
+
+    if 'add_info' in kwargs.keys():
+        pop_x[0, :] = guide_x
+        pop[0, :] = (guide_x - min_b)/diff
+
 
 
     XVmin = np.repeat(np.atleast_2d(min_b), NP, axis=0)
@@ -186,14 +201,24 @@ def optimizer_DE(problem, nobj, ncon, bounds, recordFlag, pop_test, F, CR, NP, i
 
 
     if ncon != 0:
-        pop_f, pop_g = problem.evaluate(pop_x, return_values_of=["F", "G"], **kwargs)
+        if 'callback' in kwargs.keys():
+            pop_x_complete = bilevel_fix(pop_x, level, compensate_x)
+            pop_f, pop_g = problem.evaluate(pop_x_complete, return_values_of=["F", "G"], **kwargs)
+        else:
+            pop_f, pop_g = problem.evaluate(pop_x, return_values_of=["F", "G"], **kwargs)
+
         tmp = pop_g.copy()
         tmp[tmp <= 0] = 0
         pop_cv = tmp.sum(axis=1)
 
     if ncon == 0:
         # np.savetxt('test_x.csv', pop_x, delimiter=',')
-        pop_f = problem.evaluate(pop_x, return_values_of=["F"], **kwargs)
+        if 'callback' in kwargs.keys():
+            pop_x_complete = bilevel_fix(pop_x, level, compensate_x)
+            pop_f = problem.evaluate(pop_x_complete, return_values_of=["F"], **kwargs)
+        else:
+            pop_f = problem.evaluate(pop_x, return_values_of=["F"], **kwargs)
+
 
     # plot_infill_landscape(**kwargs)
     #-------------plot---------
@@ -229,7 +254,8 @@ def optimizer_DE(problem, nobj, ncon, bounds, recordFlag, pop_test, F, CR, NP, i
 
     # DE-Minimization
     # popold is the population which has to compete. It is static through one
-    # iteration. pop is the newly emerging population
+    # iteration. pop is the
+    # newly emerging population
     # initialize bestmember  matrix
     bm = np.zeros((NP, dimensions))
 
@@ -311,6 +337,7 @@ def optimizer_DE(problem, nobj, ncon, bounds, recordFlag, pop_test, F, CR, NP, i
         mpo = mui < 0.5
 
 
+
         if st == 1:  # DE/best/1
             # differential variation
             ui = bm + F * (pm1 - pm2)
@@ -348,14 +375,22 @@ def optimizer_DE(problem, nobj, ncon, bounds, recordFlag, pop_test, F, CR, NP, i
         if use_vectorize == 1:
 
             if ncon != 0:
-                pop_f_temp, pop_g_temp = problem.evaluate(ui, return_values_of=["F", "G"], **kwargs)
+                if 'callback' in kwargs.keys():
+                    ui_complete = bilevel_fix(ui, level, compensate_x)
+                    pop_f_temp, pop_g_temp = problem.evaluate(ui_complete, return_values_of=["F", "G"], **kwargs)
+                else:
+                    pop_f_temp, pop_g_temp = problem.evaluate(ui, return_values_of=["F", "G"], **kwargs)
+
                 tmp = pop_g_temp.copy()
                 tmp[tmp <= 0] = 0
                 pop_cv_temp = tmp.sum(axis=1)
 
             if ncon == 0:
-                # np.savetxt('test_x.csv', pop_x, delimiter=',')
-                pop_f_temp = problem.evaluate(ui, return_values_of=["F"], **kwargs)
+                if 'callback' in kwargs.keys():
+                    ui_complete = bilevel_fix(ui, level, compensate_x)
+                    pop_f_temp = problem.evaluate(ui_complete, return_values_of=["F"], **kwargs)
+                else:
+                    pop_f_temp = problem.evaluate(ui, return_values_of=["F"], **kwargs)
 
             # if competitor is better than value in "cost array"
             indx = pop_f_temp <= pop_f

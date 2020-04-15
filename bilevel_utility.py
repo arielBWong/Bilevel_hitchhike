@@ -235,6 +235,34 @@ def localsearch_on_surrogate(train_x_l, complete_y,  ankor_x, problem):
 
     return pop_x, pop_f
 
+def hybridsearch_on_trueEvaluation(ankor_x, level, other_x, true_problem):
+
+    para = {
+        "add_info": ankor_x,
+        "callback": bi_level_compensate_callback,
+        "level": level,
+        "other_x": other_x
+    }
+    bounds = np.vstack((true_problem.xl, true_problem.xu)).T.tolist()
+
+    # call for global evaluation
+    best_x, best_f = \
+        optimizer_EI.optimizer_DE(true_problem,
+                                  true_problem.n_obj,
+                                  true_problem.n_constr,
+                                  bounds,
+                                  False,
+                                  None,
+                                  0.7,
+                                  0.9,
+                                  20,
+                                  50,
+                                  False,
+                                  **para)
+    best_x, best_f, nfev = localsearch_on_trueEvaluation(best_x, 250, "lower", other_x, true_problem)
+    nfev = nfev + 20*50
+    return best_x, best_f, nfev
+
 
 def localsearch_on_trueEvaluation(ankor_x, max_eval, level, other_x, true_problem):
     ankor_x = np.atleast_2d(ankor_x)
