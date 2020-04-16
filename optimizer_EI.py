@@ -185,6 +185,7 @@ def optimizer_DE(problem, nobj, ncon, bounds, recordFlag, pop_test, F, CR, NP, i
     if 'add_info' in kwargs.keys():
         print(kwargs['add_info'])
         guide_x = kwargs['add_info']
+
     if 'callback' in kwargs.keys():
         bilevel_fix = kwargs['callback']
         level = kwargs['level']
@@ -193,7 +194,6 @@ def optimizer_DE(problem, nobj, ncon, bounds, recordFlag, pop_test, F, CR, NP, i
     if 'add_info' in kwargs.keys():
         pop_x[0, :] = guide_x
         pop[0, :] = (guide_x - min_b)/diff
-
 
 
     XVmin = np.repeat(np.atleast_2d(min_b), NP, axis=0)

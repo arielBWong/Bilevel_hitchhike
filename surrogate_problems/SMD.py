@@ -23,8 +23,8 @@ class SMD1_F(Problem):
         xu2_ubound = [10] * r
         xu2_lbound = [-5] * r
 
-        self.xl = anp.array(xu1_ubound + xu2_ubound)
-        self.xu = anp.array(xu1_lbound + xu2_lbound)
+        self.xl = anp.array(xu1_lbound + xu2_lbound)
+        self.xu = anp.array(xu1_ubound + xu2_ubound)
 
         super().__init__(n_var=self.n_var,
                          n_obj=self.n_obj,

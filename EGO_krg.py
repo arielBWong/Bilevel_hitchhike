@@ -1413,7 +1413,7 @@ def main_bi_mo(seed_index, target_problem, enable_crossvalidation, method_select
     number_of_initial_samples = exp_settings['number_of_initial_samples']
     n_iter = 100  # stopping criterion set
     converge_track = []
-    folder = 'bi_output'
+    folder = exp_settings['folder']
     lower_interation = exp_settings['lower_interaction']
     stop = exp_settings['stop']
     ul_nfev = 0
@@ -1635,12 +1635,17 @@ def main_bi_mo(seed_index, target_problem, enable_crossvalidation, method_select
     duration = (end - start) / 60
     print('overall time used: %0.4f mins' % duration)
 
+    '''
     if new_fu[0, 0] < fu:
         final_fu = new_fu[0, 0]
         final_fl = new_fl[0, 0]
     else:
         final_fu = fu
         final_fl = fl
+    '''
+
+    final_fu = new_fu[0, 0]
+    final_fl = new_fl[0, 0]
 
     save_accuracy(target_problem_u, target_problem_l, final_fu, final_fl, seed_index, method_selection, folder)
     save_converge_plot(converge_track, target_problem_u.name(), method_selection, seed_index, folder)
@@ -1655,10 +1660,10 @@ def paral_args_bi(target_problems, seed_max, cross_val, methods_ops, alg_setting
     args = []
     n = len(target_problems)
     for seed in range(0, seed_max):
-        for j in np.arange(0, n, 2):
+        for j in np.arange(6, 8, 2):
             for method in methods_ops:
                 target_problem = target_problems[j: j + 2]
-                args.append((seed, target_problem, cross_val, method, method, alg_settings))
+                args.append((seed, target_problem, cross_val, method, alg_settings))
     return args
 
 
@@ -1682,15 +1687,15 @@ if __name__ == "__main__":
     methods_ops = hyp['methods_ops']
     alg_settings = hyp['alg_settings']
 
-    para_run = False
+    para_run = True
     if para_run:
-        seed_max = 11
+        seed_max = 29
         args = paral_args_bi(target_problems, seed_max, False, methods_ops, alg_settings)
-        num_workers = 22
+        num_workers = 6
         pool = mp.Pool(processes=num_workers)
         pool.starmap(main_bi_mo, ([arg for arg in args]))
     else:
-        i = 0
+        i = 4
         main_bi_mo(0, target_problems[i:i+2], False, 'eim', alg_settings)
 
 

@@ -21,6 +21,7 @@
                     "stop": 100,
                     "number_of_initial_samples": 20,
                     "num_pop": 100,
-                    "num_gen": 100
+                    "num_gen": 100,
+                    "folder": "bi_output"
                     }
 }
