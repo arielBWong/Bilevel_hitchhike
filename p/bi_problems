@@ -1,5 +1,13 @@
 {
-"BO_target_problems": ["SMD.SMD1_F(1,1,2)",
+"BO_target_problems": [ "SMD.SMD9_F(1,1,2)",
+                        "SMD.SMD9_f(1,1,2)",
+                        "SMD.SMD10_F(1,1,2)",
+                        "SMD.SMD10_f(1,1,2)",
+                        "SMD.SMD11_F(1,1,2)",
+                        "SMD.SMD11_f(1,1,2)",
+                        "SMD.SMD12_F(1,1,2)",
+                        "SMD.SMD12_f(1,1,2)",
+                        "SMD.SMD1_F(1,1,2)",
                           "SMD.SMD1_f(1,1,2)",
                           "SMD.SMD2_F(1,1,2)",
                           "SMD.SMD2_f(1,1,2)",
@@ -18,7 +26,7 @@
 "methods_ops": ["eim"],
 "alg_settings": {
                     "lower_interaction": 30,
-                    "stop": 100,
+                    "stop": 30,
                     "number_of_initial_samples": 20,
                     "num_pop": 100,
                     "num_gen": 100,

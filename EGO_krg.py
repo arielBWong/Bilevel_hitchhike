@@ -1427,7 +1427,7 @@ def main_bi_mo(seed_index, target_problem, enable_crossvalidation, method_select
     # train_x_u = np.atleast_2d([0] * target_problem_u.n_levelvar)
     # train_x_u = np.repeat(train_x_u, number_of_initial_samples, axis=0)
 
-    eim_l = EI.EIM(target_problem_l.n_levelvar, n_obj=1, n_constr=target_problem_l.n_constr,
+    eim_l = EI.EIM(target_problem_l.n_levelvar, n_obj=1, n_constr=0,
                    upper_bound=target_problem_l.xu,
                    lower_bound=target_problem_l.xl)
 
@@ -1499,7 +1499,7 @@ def main_bi_mo(seed_index, target_problem, enable_crossvalidation, method_select
 
     # include constraints
     if target_problem_u.n_constr > 0:
-        c_evaluated_u = np.vstack(c_evaluated_u, complete_c_u)
+        c_evaluated_u = np.vstack((c_evaluated_u, complete_c_u))
         c_evaluated_u = np.delete(c_evaluated_u, obj=0, axis=0)
 
     # before entering evaluation, adjusting save, delete first row
@@ -1515,7 +1515,7 @@ def main_bi_mo(seed_index, target_problem, enable_crossvalidation, method_select
     y_evaluated_l = np.delete(y_evaluated_l, obj=0, axis=0)
 
     # search for opt xu
-    eim_u = EI.EIM(target_problem_u.n_levelvar, n_obj=1, n_constr=target_problem_u.n_constr,
+    eim_u = EI.EIM(target_problem_u.n_levelvar, n_obj=1, n_constr=0,
                    upper_bound=target_problem_u.xu,
                    lower_bound=target_problem_u.xl)
     # before entering iteration
@@ -1608,48 +1608,45 @@ def main_bi_mo(seed_index, target_problem, enable_crossvalidation, method_select
         y_evaluated_u = np.atleast_2d(y_evaluated_u).reshape(-1, target_problem_u.n_obj)
         x_evaluated_u = np.atleast_2d(x_evaluated_u).reshape(-1, target_problem_u.n_var)
 
-    min_fu_index = np.argmin(y_evaluated_u)
-    best_xu_sofar = np.atleast_2d(x_evaluated_u[min_fu_index, 0:target_problem_u.n_levelvar])
-    matching_xl = np.atleast_2d(x_evaluated_l[min_fu_index, :])
-    fu = y_evaluated_u[min_fu_index, :]
-    fl = y_evaluated_l[min_fu_index, :]
+    if len(y_evaluated_u) != 0:
+        min_fu_index = np.argmin(y_evaluated_u)
+        best_xu_sofar = np.atleast_2d(x_evaluated_u[min_fu_index, 0:target_problem_u.n_levelvar])
+        matching_xl = np.atleast_2d(x_evaluated_l[min_fu_index, :])
+        fu = y_evaluated_u[min_fu_index, :]
+        fl = y_evaluated_l[min_fu_index, :]
+        save_before_reevaluation(target_problem_u, target_problem_l, best_xu_sofar, matching_xl, fu, fl, seed_index,
+                                 method_selection, folder)
 
-    save_before_reevaluation(target_problem_u, target_problem_l, best_xu_sofar, matching_xl, fu, fl, seed_index, method_selection,folder )
 
-    # conduct a final local search based on best_xu_sofar
-    # localsearch_xl, localsearch_fl, local_fev = localsearch_on_trueEvaluation(matching_xl, 100, 'lower', best_xu_sofar, target_problem_l)
-    localsearch_xl, localsearch_fl, local_fev = hybridsearch_on_trueEvaluation(matching_xl, 'lower', best_xu_sofar, target_problem_l)
 
-    ll_nfev += local_fev
 
-    new_complete_x = np.hstack((np.atleast_2d(best_xu_sofar), np.atleast_2d(localsearch_xl)))
-    new_fl = target_problem_l.evaluate(new_complete_x, return_values_of=["F"])
-    new_fu = target_problem_u.evaluate(new_complete_x, return_values_of=["F"])
-    y_evaluated_u = np.vstack((y_evaluated_u, new_fu))
-    y_evaluated_l = np.vstack((y_evaluated_l, new_fl))
-    x_evaluated_u = np.vstack((x_evaluated_u, new_complete_x))
-    x_evaluated_l = np.vstack((x_evaluated_l, np.atleast_2d(matching_xl)))
-    converge_track.append(new_fu[0, 0])
+        # conduct a final local search based on best_xu_sofar
+        # localsearch_xl, localsearch_fl, local_fev = localsearch_on_trueEvaluation(matching_xl, 100, 'lower', best_xu_sofar, target_problem_l)
+        localsearch_xl, localsearch_fl, local_fev = hybridsearch_on_trueEvaluation(matching_xl, 'lower', best_xu_sofar, target_problem_l)
 
-    end = time.time()
-    duration = (end - start) / 60
-    print('overall time used: %0.4f mins' % duration)
+        ll_nfev += local_fev
 
-    '''
-    if new_fu[0, 0] < fu:
+        new_complete_x = np.hstack((np.atleast_2d(best_xu_sofar), np.atleast_2d(localsearch_xl)))
+        new_fl = target_problem_l.evaluate(new_complete_x, return_values_of=["F"])
+        new_fu = target_problem_u.evaluate(new_complete_x, return_values_of=["F"])
+        y_evaluated_u = np.vstack((y_evaluated_u, new_fu))
+        y_evaluated_l = np.vstack((y_evaluated_l, new_fl))
+        x_evaluated_u = np.vstack((x_evaluated_u, new_complete_x))
+        x_evaluated_l = np.vstack((x_evaluated_l, np.atleast_2d(matching_xl)))
+        converge_track.append(new_fu[0, 0])
+
+        end = time.time()
+        duration = (end - start) / 60
+        print('overall time used: %0.4f mins' % duration)
+
         final_fu = new_fu[0, 0]
         final_fl = new_fl[0, 0]
+
+        save_accuracy(target_problem_u, target_problem_l, final_fu, final_fl, seed_index, method_selection, folder)
+        save_converge_plot(converge_track, target_problem_u.name(), method_selection, seed_index, folder)
+        save_function_evaluation(ll_nfev, target_problem_l, seed_index, method_selection, folder)
     else:
-        final_fu = fu
-        final_fl = fl
-    '''
-
-    final_fu = new_fu[0, 0]
-    final_fl = new_fl[0, 0]
-
-    save_accuracy(target_problem_u, target_problem_l, final_fu, final_fl, seed_index, method_selection, folder)
-    save_converge_plot(converge_track, target_problem_u.name(), method_selection, seed_index, folder)
-    save_function_evaluation(ll_nfev, target_problem_l, seed_index, method_selection, folder)
+        print('no feasible solution found')
 
     return None
 
@@ -1687,7 +1684,7 @@ if __name__ == "__main__":
     methods_ops = hyp['methods_ops']
     alg_settings = hyp['alg_settings']
 
-    para_run = True
+    para_run = False
     if para_run:
         seed_max = 29
         args = paral_args_bi(target_problems, seed_max, False, methods_ops, alg_settings)
@@ -1695,8 +1692,8 @@ if __name__ == "__main__":
         pool = mp.Pool(processes=num_workers)
         pool.starmap(main_bi_mo, ([arg for arg in args]))
     else:
-        i = 4
-        main_bi_mo(0, target_problems[i:i+2], False, 'eim', alg_settings)
+        i = 6
+        main_bi_mo(6, target_problems[i:i+2], False, 'eim', alg_settings)
 
 
 

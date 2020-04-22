@@ -97,11 +97,12 @@ def normalization_with_self(y):
     return (y - min_y)/(max_y - min_y)
 
 
-def search_for_matching_otherlevel_x(x_other, search_iter, n_samples, problem, level, eim, eim_pop, eim_gen,  seed_index, enable_crossvalidation, method_selection):
+def search_for_matching_otherlevel_x(x_other, search_iter, n_samples, problem, level, eim, eim_pop, eim_gen,  seed_index, enable_crossvalidation, method_selection, **kwargs):
     train_x, train_y, cons_y = init_xy(n_samples, problem, seed_index,
                                              **{'problem_type': 'bilevel'})
 
     num_l = train_x.shape[0]
+    # print(train_x[0, :])
     x_other = np.atleast_2d(x_other)
     xother_expand = np.repeat(x_other, num_l, axis=0)
     if level == 'lower':
@@ -110,7 +111,7 @@ def search_for_matching_otherlevel_x(x_other, search_iter, n_samples, problem, l
         complete_x = np.hstack((train_x, xother_expand))
 
     if problem.n_constr > 0:
-        print("constraint settings")
+        # print("constraint settings")
         complete_y, complete_c = problem.evaluate(complete_x, return_values_of=["F", "G"])
     else:
         complete_y = problem.evaluate(complete_x, return_values_of=["F"])
@@ -137,7 +138,7 @@ def search_for_matching_otherlevel_x(x_other, search_iter, n_samples, problem, l
             complete_new_x = np.hstack((new_x, x_other))
 
         if problem.n_constr > 0:
-            print('constraints setting')
+            # print('constraints setting')
             complete_new_y, complete_new_c = problem.evaluate(complete_new_x, return_values_of=["F", "G"])
             complete_c = np.vstack((complete_c, complete_new_c))
         else:
@@ -148,20 +149,27 @@ def search_for_matching_otherlevel_x(x_other, search_iter, n_samples, problem, l
         # print(np.min(complete_y))
 
     if problem.n_constr > 0:
-        print('constr process')
-        complete_y, train_x = return_feasible(complete_c, complete_y, train_x)
+        # print('constr process')
+        complete_y_feasible, train_x_feasible = return_feasible(complete_c, complete_y, train_x)
+
+    if len(complete_y_feasible) !=0:
+        complete_y = complete_y_feasible
+        train_x = train_x_feasible
+    else:
+        print("search on other level, no feasible found")
+
 
     best_y_index = np.argmin(complete_y)
     best_x = train_x[best_y_index, :]
     best_x = np.atleast_2d(best_x)
 
-    best_y = np.min(complete_y)
+    best_y = np.min(train_x_feasible)
 
     # conduct local search with true evaluation
-    # localsearch_x, est_f = localsearch_on_surrogate(train_x_l, complete_y, best_x, eim)
     localsearch_x, localsearch_f, n_fev = localsearch_on_trueEvaluation(best_x, 250, level, x_other, problem)
-
+    # localsearch_x, localsearch_f, n_fev = hybridsearch_on_trueEvaluation(best_x,"lower", x_other, problem)
     n_fev = n_fev + search_iter + n_samples
+    print('local search before %.4f, after %.4f' % (best_y, localsearch_f))
 
     if localsearch_f < best_y:
         train_x = np.vstack((train_x, localsearch_x))
@@ -282,13 +290,14 @@ def localsearch_on_trueEvaluation(ankor_x, max_eval, level, other_x, true_proble
             x = np.hstack((other_x, x))
         else:
             x = np.hstack((x, other_x))
-        return true_problem.evaluate(x, return_values_of=["G"])
+        constr = true_problem.evaluate(x, return_values_of=["G"])
+        return constr.ravel()
 
     bounds = scipy.optimize.Bounds(lb=true_problem.xl, ub=true_problem.xu)
     if true_problem.n_constr > 0:
         optimization_res = scipy.optimize.minimize(
             obj_func, ankor_x, method="SLSQP", options={'maxiter': max_eval},
-            constraint={'type': 'ineq', 'fun': cons_func}, jac=False, bounds=bounds)
+            constraints={'type': 'ineq', 'fun': cons_func}, jac=False, bounds=bounds)
     else:
         optimization_res = scipy.optimize.minimize(
             obj_func, ankor_x, method="SLSQP", options={'maxiter': max_eval}, jac=False,
@@ -329,7 +338,7 @@ def surrogate_search_for_nextx(train_x, train_y, train_c, eim, eim_pop, eim_gen,
     xbound_u = convert_with_zscore(eim.xu, x_mean, x_std)
     x_bounds = np.vstack((xbound_l, xbound_u)).T.tolist()  # for ea, column direction
 
-    # construct feasible for para
+    # construct feasible for dict: para
     if train_c is not None:
         feasible_norm, _ = return_feasible(train_c, train_y_norm, train_x_norm)
     else:
@@ -734,14 +743,198 @@ def multiple_algorithm_results_combine():
     saveName = result_folder + '\\' + level + '_compare.csv'
     h.to_csv(saveName)
 
+def compare_python_matlab():
+    import pandas as pd
+
+    pname = 'save_local_results.csv'
+    mname = 'search_result.csv'
+    pname_nfev = 'save_nfev.csv'
+    mname_nfev = 'mfnev.csv'
+    p = np.loadtxt(pname)
+    m = np.loadtxt(mname)
+    pfnev = np.loadtxt(pname_nfev)
+    mfnev = np.loadtxt(mname_nfev)
+
+    p = np.atleast_2d(p).reshape(-1, 1)
+    p = np.vstack((p, np.median(p)))
+    m = np.atleast_2d(m).reshape(-1, 1)
+    m = np.vstack((m, np.median(m)))
+    pfnev = np.atleast_2d(pfnev).reshape(-1, 1)
+    pfnev = np.vstack((pfnev, np.median(pfnev)))
+    mfnev = np.atleast_2d(mfnev).reshape(-1, 1)
+    mfnev = np.vstack((mfnev, np.median(mfnev)))
+
+    out = np.hstack((p, m, pfnev, mfnev))
+
+
+    index = []
+    for i in range(29):
+        index = np.append(index, str(i))
+    index = np.append(index, 'median')
+
+    h = pd.DataFrame(out, columns=['p localsearch', 'm localsearch', 'p nfev', 'm nfev'], index=index)
+    saveName = 'pm_compare.csv'
+    h.to_csv(saveName)
+
+
+def visualization_smd3(problem, seed_index):
+    from mpl_toolkits.mplot3d import Axes3D
+    import matplotlib.pyplot as plt
+    n_samples = 1000
+    train_x, train_y, cons_y = init_xy(n_samples, problem, seed_index,
+                                       **{'problem_type': 'bilevel'})
+    x_other = [0., 0.]
+    num_l = n_samples
+    level = 'lower'
+    x_other = np.atleast_2d(x_other)
+    xother_expand = np.repeat(x_other, num_l, axis=0)
+    if level == 'lower':
+        complete_x = np.hstack((xother_expand, train_x))
+    else:
+        complete_x = np.hstack((train_x, xother_expand))
+    train_y = problem.evaluate(complete_x, return_values_of=["F"])
+
+    fig = plt.figure(figsize=(12, 5))
+    ax = fig.add_subplot(121, projection='3d')
+    ax.set_xlabel('xl1_1')
+    ax.set_xlim([-5, 10])
+    ax.set_ylabel('xl1_2')
+    ax.set_ylim([-5, 10])
+    ax.set_zlabel('xl2_1');
+    ax.set_zlim([-np.pi / 2, np.pi / 2])
+    cm = plt.cm.get_cmap('RdYlBu')
+    cl = ax.scatter(train_x[:, 0], train_x[:, 1], train_x[:, 2], c=train_y.ravel(), cmap=cm)
+    ax.set_title('1000 points in xl boundaries')
+
+
+
+
+
+
+    train_y[train_y < 3] = 0
+    train_y_vio = train_y.sum(axis=1)
+    throwaway = np.nonzero(train_y_vio)
+    a = np.arange(0, n_samples)
+    keep_index = np.setdiff1d(a, throwaway)
+
+    train_y = train_y[keep_index, :]
+    train_x = train_x[keep_index, :]
+    ax = fig.add_subplot(122, projection='3d')
+    ax.set_xlabel('xl1_1')
+    ax.set_xlim([-5, 10])
+    ax.set_ylabel('xl1_2')
+    ax.set_ylim([-5, 10])
+    ax.set_zlabel('xl2_1');
+    ax.set_zlim([-np.pi / 2, np.pi / 2])
+    cm = plt.cm.get_cmap('RdYlBu')
+    ax.scatter(train_x[:, 0], train_x[:, 1], train_x[:, 2], c=train_y.ravel(), cmap=cm)
+    fig.subplots_adjust(right=0.8)
+    fig.colorbar(cl)
+
+
+    ax.set_title('fl values smaller than 3')
+    #ax.view_init(60, 10)
+    plt.show()
+    plt.savefig('smd3_l.eps', format='eps')
+
+def plotCountour():
+    # smd3
+    xl1 = np.linspace(-5, 10, 100)
+    xl2 = np.linspace(-np.pi/2 + 1e-8, np.pi/2 - 1e-8, 100)
+
+    mesh_xl1, mesh_xl2 = np.meshgrid(xl1, xl2)
+    fl = 1 + mesh_xl1**2 - np.cos(2 * np.pi * mesh_xl1) + np.tan(mesh_xl2) ** 2
+    fl[fl > 10] = 11
+    fig = plt.figure()
+    ax = fig.add_subplot(111)
+
+    cs = ax.contourf(mesh_xl1, mesh_xl2, fl, levels=50, cmap="RdBu_r")
+    fig.colorbar(cs, ax=ax)
+    plt.show()
 
 if __name__ == "__main__":
+
+    # compare_python_matlab()
+    # plotCountour()
+
     # problem
+
     problems_json = 'p/bi_problems'
     with open(problems_json, 'r') as data_file:
         hyp = json.load(data_file)
     target_problems = hyp['BO_target_problems']
-    results_process_bestf(target_problems, 'eim')
+
+    seed = 1
+    np.random.seed(seed)
+    target_problem_u = SMD.SMD12_F(1, 1, 2)  # p, r, q
+    target_problem_l = SMD.SMD12_f(1, 1, 2)  # p, r, q
+
+    xu, _, _ = init_xy(10, target_problem_u, seed, **{'problem_type':'bilevel'})
+    xl, _, _ = init_xy(10, target_problem_l, seed, **{'problem_type':'bilevel'})
+    # visualization_smd3(problem, 0)
+    np.savetxt('testxu.csv', xu, delimiter=',')
+    np.savetxt('testxl.csv', xl, delimiter=',')
+
+    x = np.hstack((xu, xl))
+    f, g = target_problem_l.evaluate(x, return_values_of=['F', 'G'])
+    print(f)
+    print(g)
+
+
+    '''
+    test_f = []
+    # np.random.seed(seed_index)
+    x = []
+    nfev = []
+    for i in range(29):
+        np.random.seed(i)
+
+        target_problem_l = eval(target_problem[1])
+        eim_l = EI.EIM(target_problem_l.n_levelvar, n_obj=1, n_constr=target_problem_l.n_constr,
+                       upper_bound=target_problem_l.xu,
+                       lower_bound=target_problem_l.xl)
+
+        xu = np.atleast_2d([0., 0.])
+        kws = {'seed': i}
+        matching_x, matching_f, n_fev_local, _, _ = \
+            search_for_matching_otherlevel_x(xu,
+                                             30,
+                                             20,
+                                             target_problem_l,
+                                             'lower',
+                                             eim_l,
+                                             100,
+                                             100,
+                                             i,
+                                             False,
+                                             'eim',
+                                             **kws)
+        print(matching_x)
+        x = np.append(x, matching_x)
+        print(matching_f)
+
+        test_f = np.append(test_f, matching_f)
+        print(test_f)
+        nfev = np.append(nfev, n_fev_local-50)
+
+    x = np.atleast_2d(x).reshape(-1, 3)
+    f_median = np.argsort(test_f)
+
+
+    save_name_p = 'save_local_results.csv'
+    save_name = 'save_nfev.csv'
+    np.savetxt(save_name_p, test_f, delimiter=',')
+    np.savetxt(save_name, nfev, delimiter=',')
+
+    # f_median = f_median[5]
+    # print(test_f[f_median])
+    # print(np.median(test_f))
+    # print(x[f_median, :])
+    # a = x[f_median,:]
+    # b = 2 + a[0]**2 - np.cos(2*np.pi * a[0]) + a[1]**2 - np.cos(2 * np.pi * a[1]) + np.tan(a[2])**2
+    # print(b)
+    '''
+
 
 
 

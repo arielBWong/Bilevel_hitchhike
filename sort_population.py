@@ -9,8 +9,8 @@ def sort_population(popsize,nobj,ncon,infeasible,feasible,all_cv,all_f):
         infeasible=np.asarray(infeasible)
         infeasible=infeasible.flatten()
         index1 = all_cv[infeasible].argsort()
-        index1=index1.tolist()
-        l2=infeasible[index1]
+        index1 = index1.tolist()
+        l2 = infeasible[index1]
     if len(feasible)>=1:
         ff = all_f[feasible,:]
         if nobj==1:
