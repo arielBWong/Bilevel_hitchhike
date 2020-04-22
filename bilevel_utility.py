@@ -3,6 +3,7 @@ import matplotlib.pyplot as plt
 from matplotlib.lines import Line2D
 import matplotlib.pyplot as plt
 import optimizer_EI
+import pygmo as pg
 from pymop.factory import get_problem_from_func
 from pymop import ZDT1, ZDT2, ZDT3, ZDT4, ZDT6, \
                   DTLZ1, DTLZ2,\
@@ -152,18 +153,20 @@ def search_for_matching_otherlevel_x(x_other, search_iter, n_samples, problem, l
         # print('constr process')
         complete_y_feasible, train_x_feasible = return_feasible(complete_c, complete_y, train_x)
 
-    if len(complete_y_feasible) !=0:
+    if len(complete_y_feasible) > 0:
         complete_y = complete_y_feasible
         train_x = train_x_feasible
+        best_y_index = np.argmin(complete_y)
+        best_x = train_x[best_y_index, :]
+        best_x = np.atleast_2d(best_x)
+        best_y = np.min(train_x_feasible)
+
     else:
         print("search on other level, no feasible found")
+        best_x, best_y = nofeasible_select(complete_c, complete_y, train_x)
 
 
-    best_y_index = np.argmin(complete_y)
-    best_x = train_x[best_y_index, :]
-    best_x = np.atleast_2d(best_x)
 
-    best_y = np.min(train_x_feasible)
 
     # conduct local search with true evaluation
     localsearch_x, localsearch_f, n_fev = localsearch_on_trueEvaluation(best_x, 250, level, x_other, problem)
@@ -176,6 +179,7 @@ def search_for_matching_otherlevel_x(x_other, search_iter, n_samples, problem, l
         complete_y = np.vstack((complete_y, localsearch_f))
         return localsearch_x, localsearch_f, n_fev, train_x, complete_y
 
+    print('local search is not able to find better matching x, y')
     return np.atleast_2d(best_x), np.atleast_2d(best_y), n_fev, train_x, complete_y,
 
 
@@ -291,6 +295,7 @@ def localsearch_on_trueEvaluation(ankor_x, max_eval, level, other_x, true_proble
         else:
             x = np.hstack((x, other_x))
         constr = true_problem.evaluate(x, return_values_of=["G"])
+        constr = constr * -1
         return constr.ravel()
 
     bounds = scipy.optimize.Bounds(lb=true_problem.xl, ub=true_problem.xu)
@@ -307,6 +312,26 @@ def localsearch_on_trueEvaluation(ankor_x, max_eval, level, other_x, true_proble
 
     x, f, num_fev = optimization_res.x, optimization_res.fun, optimization_res.nfev
     return x, f, num_fev
+
+def nofeasible_select(constr_c, train_y, train_x):
+    # single constraint
+    # constraint smaller or equal to
+    if constr_c.shape[1] == 1:
+        index = np.argmin(constr_c)
+        return train_x[index, :], train_y[index, :]
+    else:
+        ndf, dl, dc, ndr = pg.fast_non_dominated_sorting(constr_c)
+        ndf = list(ndf)
+        n = len(ndf[0])
+        if n > 1:
+            a = np.arange(n)
+            select_index = np.random.choice(a)
+            return train_x[ndf[0][select_index], :], train_y[ndf[0][select_index], :]
+        else:
+            return train_x[ndf[0], :], train_y[ndf[0], :]
+
+
+
 
 def return_feasible(solutions_c, solutions_y, solution_x):
     sample_n = solutions_c.shape[0]
@@ -858,7 +883,12 @@ if __name__ == "__main__":
     # plotCountour()
 
     # problem
+    a = np.arange(10)
+    print(a)
+    print(np.random.choice(a))
 
+
+    '''
     problems_json = 'p/bi_problems'
     with open(problems_json, 'r') as data_file:
         hyp = json.load(data_file)
@@ -881,7 +911,7 @@ if __name__ == "__main__":
     print(g)
 
 
-    '''
+    
     test_f = []
     # np.random.seed(seed_index)
     x = []
