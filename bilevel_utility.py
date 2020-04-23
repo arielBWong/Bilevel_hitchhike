@@ -159,12 +159,16 @@ def search_for_matching_otherlevel_x(x_other, search_iter, n_samples, problem, l
         best_y_index = np.argmin(complete_y)
         best_x = train_x[best_y_index, :]
         best_x = np.atleast_2d(best_x)
-        best_y = np.min(train_x_feasible)
+        best_y = np.min(complete_y)
+        print("before local search best feasible y: %.4f" % best_y)
 
     else:
         print("search on other level, no feasible found")
         best_x, best_y = nofeasible_select(complete_c, complete_y, train_x)
+        print("before local search, closest best y: %.4f" % best_y)
 
+    np.savetxt('xu.csv', x_other, delimiter=',')
+    np.savetxt('startx.csv', best_x, delimiter=',')
 
 
 
@@ -174,7 +178,22 @@ def search_for_matching_otherlevel_x(x_other, search_iter, n_samples, problem, l
     n_fev = n_fev + search_iter + n_samples
     print('local search before %.4f, after %.4f' % (best_y, localsearch_f))
 
-    if localsearch_f < best_y:
+    if problem.n_constr > 0:
+        # process feasiblity
+        if len(complete_y_feasible) > 0 and localsearch_f < best_y:
+            return localsearch_x, localsearch_f, n_fev, train_x, complete_y
+        # surrogate did not find any feasible solutions
+        else:
+            # check feasibility of local search
+            # problem.evaluate(complete_new_x, return_values_of=["F"])
+            if level == 'lower':
+                c = problem.evaluate(np.hstack((x_other, np.atleast_2d(localsearch_x))), return_values_of=["G"])
+            else:
+                c = problem.evaluate(np.hstack((np.atleast_2d(localsearch_x), x_other)), return_values_of=["G"])
+            print(c)
+            return localsearch_x, localsearch_f, n_fev, train_x, complete_y
+
+    elif localsearch_f < best_y:
         train_x = np.vstack((train_x, localsearch_x))
         complete_y = np.vstack((complete_y, localsearch_f))
         return localsearch_x, localsearch_f, n_fev, train_x, complete_y
@@ -257,6 +276,7 @@ def hybridsearch_on_trueEvaluation(ankor_x, level, other_x, true_problem):
     bounds = np.vstack((true_problem.xl, true_problem.xu)).T.tolist()
 
     # call for global evaluation
+    '''
     best_x, best_f = \
         optimizer_EI.optimizer_DE(true_problem,
                                   true_problem.n_obj,
@@ -270,6 +290,21 @@ def hybridsearch_on_trueEvaluation(ankor_x, level, other_x, true_problem):
                                   50,
                                   False,
                                   **para)
+    '''
+    pop_x, pop_f, pop_g, archive_x, archive_f, archive_g, (record_f, record_x) = \
+        optimizer_EI.optimizer(true_problem,
+                               true_problem.n_obj,
+                               true_problem.n_constr,
+                               bounds,
+                               False,
+                               None,
+                               0.1,
+                               0.9,
+                               20,
+                               50,
+                               **para)
+    best_x = pop_x[0]
+    best_f = pop_f[0]
 
     best_x, best_f, nfev = localsearch_on_trueEvaluation(best_x, 250, "lower", other_x, true_problem)
     nfev = nfev + 20*50
@@ -521,13 +556,13 @@ def save_accuracy(problem_u, problem_l, best_y_u, best_y_l, seed_index, method_s
     np.savetxt(saveName, s, delimiter=',')
 
 # output each problem's output into one single table
-def results_process_bestf(BO_target_problems, method_selection):
+def results_process_bestf(BO_target_problems, method_selection, seedmax):
     import pandas as pd
     n = len(BO_target_problems)
     mean_data = []
     median_data = []
     pname_list =[]
-    for j in np.arange(6, 8, 2):
+    for j in np.arange(0, 2, 2):
         target_problem = BO_target_problems[j]
         target_problem = eval(target_problem)
         problem_name = target_problem.name()
@@ -540,7 +575,7 @@ def results_process_bestf(BO_target_problems, method_selection):
         # result_folder = working_folder + '\\bi_local_output' + '\\' + problem_name + '_' + method_selection
 
         accuracy_data = []
-        for seed_index in range(29):
+        for seed_index in range(seedmax):
             # saveName = result_folder + '\\accuracy_before_evaluation' + str(seed_index) + '.csv'
             saveName = result_folder + '\\accuracy_' + str(seed_index) + '.csv'
             data = np.loadtxt(saveName, delimiter=',')
@@ -558,8 +593,8 @@ def results_process_bestf(BO_target_problems, method_selection):
     h2 = pd.DataFrame(median_data, columns=['ul', 'll'], index=pname_list)
     working_folder = os.getcwd()
     result_folder = working_folder + '\\bi_process'
-    saveName = result_folder + '\\ego_accuracy_mean_4.csv'
-    saveName2 = result_folder + '\\ego_accuracy_median_4.csv'
+    saveName = result_folder + '\\ego_accuracy_mean.csv'
+    saveName2 = result_folder + '\\ego_accuracy_median.csv'
     h.to_csv(saveName)
     h2.to_csv(saveName2)
 
@@ -879,13 +914,17 @@ def plotCountour():
 
 if __name__ == "__main__":
 
+
+    problems_json = 'p/bi_problems'
+    with open(problems_json, 'r') as data_file:
+        hyp = json.load(data_file)
+    target_problems = hyp['BO_target_problems']
+
+    results_process_bestf(target_problems[0:2],'eim', 11)
     # compare_python_matlab()
     # plotCountour()
 
     # problem
-    a = np.arange(10)
-    print(a)
-    print(np.random.choice(a))
 
 
     '''

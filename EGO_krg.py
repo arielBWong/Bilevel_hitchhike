@@ -1621,7 +1621,8 @@ def main_bi_mo(seed_index, target_problem, enable_crossvalidation, method_select
 
 
         # conduct a final local search based on best_xu_sofar
-        # localsearch_xl, localsearch_fl, local_fev = localsearch_on_trueEvaluation(matching_xl, 100, 'lower', best_xu_sofar, target_problem_l)
+
+
         localsearch_xl, localsearch_fl, local_fev = hybridsearch_on_trueEvaluation(matching_xl, 'lower', best_xu_sofar, target_problem_l)
 
         ll_nfev += local_fev
