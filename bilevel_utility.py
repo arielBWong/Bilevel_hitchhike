@@ -97,6 +97,15 @@ def normalization_with_self(y):
     max_y = np.max(y, axis=0)
     return (y - min_y)/(max_y - min_y)
 
+def feasibility_adjustment(part_x, combine_x, combine_y, combine_c, feasibility):
+    feasibility = np.array(feasibility)
+    infeasible_index = np.argwhere(feasibility == False)
+    infeasible_index = infeasible_index.ravel()
+    part_x = np.delete(part_x, infeasible_index, axis=0)
+    combine_x = np.delete(combine_x, infeasible_index, axis=0)
+    combine_y = np.delete(combine_y, infeasible_index, axis=0)
+    combine_c = np.delete(combine_c, infeasible_index, axis=0)
+    return part_x, combine_x, combine_y, combine_c
 
 def search_for_matching_otherlevel_x(x_other, search_iter, n_samples, problem, level, eim, eim_pop, eim_gen,  seed_index, enable_crossvalidation, method_selection, **kwargs):
     train_x, train_y, cons_y = init_xy(n_samples, problem, seed_index,
@@ -138,17 +147,16 @@ def search_for_matching_otherlevel_x(x_other, search_iter, n_samples, problem, l
         else:
             complete_new_x = np.hstack((new_x, x_other))
 
+        # include evaluated cons and f
         if problem.n_constr > 0:
             # print('constraints setting')
             complete_new_y, complete_new_c = problem.evaluate(complete_new_x, return_values_of=["F", "G"])
             complete_c = np.vstack((complete_c, complete_new_c))
         else:
             complete_new_y = problem.evaluate(complete_new_x, return_values_of=["F"])
-
         complete_y = np.vstack((complete_y, complete_new_y))
 
-        # print(np.min(complete_y))
-
+    # after ego, decide where to start local search
     if problem.n_constr > 0:
         # print('constr process')
         complete_y_feasible, train_x_feasible = return_feasible(complete_c, complete_y, train_x)
@@ -160,46 +168,51 @@ def search_for_matching_otherlevel_x(x_other, search_iter, n_samples, problem, l
         best_x = train_x[best_y_index, :]
         best_x = np.atleast_2d(best_x)
         best_y = np.min(complete_y)
-        print("before local search best feasible y: %.4f" % best_y)
-
     else:
-        print("search on other level, no feasible found")
+        print("no feasible found while ego on searching matching x")
         best_x, best_y = nofeasible_select(complete_c, complete_y, train_x)
         print("before local search, closest best y: %.4f" % best_y)
 
     np.savetxt('xu.csv', x_other, delimiter=',')
     np.savetxt('startx.csv', best_x, delimiter=',')
 
-
-
     # conduct local search with true evaluation
     localsearch_x, localsearch_f, n_fev = localsearch_on_trueEvaluation(best_x, 250, level, x_other, problem)
-    # localsearch_x, localsearch_f, n_fev = hybridsearch_on_trueEvaluation(best_x,"lower", x_other, problem)
     n_fev = n_fev + search_iter + n_samples
     print('local search before %.4f, after %.4f' % (best_y, localsearch_f))
 
+    # decide which x is returned
     if problem.n_constr > 0:
-        # process feasiblity
-        if len(complete_y_feasible) > 0 and localsearch_f < best_y:
-            return localsearch_x, localsearch_f, n_fev, train_x, complete_y
+        # consider feasibility
+        if len(complete_y_feasible) > 0:
+            feasible_flag = True
+            if localsearch_f < best_y:
+                return localsearch_x, localsearch_f, n_fev, feasible_flag
+            else:
+                return np.atleast_2d(best_x), np.atleast_2d(best_y), n_fev, feasible_flag
         # surrogate did not find any feasible solutions
         else:
             # check feasibility of local search
-            # problem.evaluate(complete_new_x, return_values_of=["F"])
             if level == 'lower':
                 c = problem.evaluate(np.hstack((x_other, np.atleast_2d(localsearch_x))), return_values_of=["G"])
             else:
                 c = problem.evaluate(np.hstack((np.atleast_2d(localsearch_x), x_other)), return_values_of=["G"])
-            print(c)
-            return localsearch_x, localsearch_f, n_fev, train_x, complete_y
-
+            # double check feasibility
+            if np.any(c > 0) and localsearch_f < best_y:
+                # no feasible function found
+                print('local search returned infeasible')
+                feasible_flag = False
+                return localsearch_x, localsearch_f, n_fev, feasible_flag
+            elif localsearch_f < best_y:
+                feasible_flag = True
+                return localsearch_x, localsearch_f, n_fev, feasible_flag
+    # no-constraint problem process
     elif localsearch_f < best_y:
-        train_x = np.vstack((train_x, localsearch_x))
-        complete_y = np.vstack((complete_y, localsearch_f))
-        return localsearch_x, localsearch_f, n_fev, train_x, complete_y
+        return localsearch_x, localsearch_f, n_fev, True
+
 
     print('local search is not able to find better matching x, y')
-    return np.atleast_2d(best_x), np.atleast_2d(best_y), n_fev, train_x, complete_y,
+    return np.atleast_2d(best_x), np.atleast_2d(best_y), n_fev, True
 
 
 def localsearch_for_matching_otherlevel_x(x_other, max_eval, search_level, problem, seed_index):
@@ -349,24 +362,13 @@ def localsearch_on_trueEvaluation(ankor_x, max_eval, level, other_x, true_proble
     return x, f, num_fev
 
 def nofeasible_select(constr_c, train_y, train_x):
-    # single constraint
-    # constraint smaller or equal to
-    if constr_c.shape[1] == 1:
-        index = np.argmin(constr_c)
-        return train_x[index, :], train_y[index, :]
-    else:
-        ndf, dl, dc, ndr = pg.fast_non_dominated_sorting(constr_c)
-        ndf = list(ndf)
-        n = len(ndf[0])
-        if n > 1:
-            a = np.arange(n)
-            select_index = np.random.choice(a)
-            return train_x[ndf[0][select_index], :], train_y[ndf[0][select_index], :]
-        else:
-            return train_x[ndf[0], :], train_y[ndf[0], :]
 
-
-
+    # infeasible selection
+    # come to this method means no feasibles
+    # so select smallest infeasible
+    constr_c = np.sum(constr_c, axis=1)
+    feas_closest = np.argmin(constr_c)
+    return np.atleast_2d(train_x[feas_closest, :]), np.atleast_2d(train_y[feas_closest, :])
 
 def return_feasible(solutions_c, solutions_y, solution_x):
     sample_n = solutions_c.shape[0]
@@ -920,7 +922,21 @@ if __name__ == "__main__":
         hyp = json.load(data_file)
     target_problems = hyp['BO_target_problems']
 
-    results_process_bestf(target_problems[0:2],'eim', 11)
+    a = np.atleast_2d(np.random.rand(3, 4))
+    b = np.atleast_2d(np.random.rand(3, 4))
+    c = np.atleast_2d(np.random.rand(3, 4))
+    d = np.atleast_2d(np.random.rand(3, 4))
+
+    x, y, z, k = feasibility_adjustment(a, b, c, d, [True, True, False])
+    print(a)
+    print(x)
+
+
+
+
+
+
+    # results_process_bestf(target_problems[0:2],'eim', 11)
     # compare_python_matlab()
     # plotCountour()
 
