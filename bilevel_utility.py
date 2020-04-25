@@ -525,9 +525,9 @@ def save_converge(converge_track, problem_name, method_selection, seed_index):
 
 def save_converge_plot(converge_track, problem_name, method_selection, seed_index, folder):
     working_folder = os.getcwd()
-    result_folder = working_folder + '\\bi_output' + '\\' + problem_name[0:4] + '_' + method_selection
-    result_folder = working_folder + '\\bi_ego_output' + '\\' + problem_name[0:4] + '_' + method_selection
-    result_folder = working_folder + '\\' + folder + '\\' + problem_name[0:4] + '_' + method_selection
+    result_folder = working_folder + '\\bi_output' + '\\' + problem_name[0:-2] + '_' + method_selection
+    result_folder = working_folder + '\\bi_ego_output' + '\\' + problem_name[0:-2] + '_' + method_selection
+    result_folder = working_folder + '\\' + folder + '\\' + problem_name[0:-2] + '_' + method_selection
 
     if not os.path.isdir(result_folder):
         os.mkdir(result_folder)
@@ -549,7 +549,7 @@ def save_accuracy(problem_u, problem_l, best_y_u, best_y_l, seed_index, method_s
     accuracy_l = np.abs(best_y_l - problem_l.opt)
     s = [accuracy_u, accuracy_l]
     working_folder = os.getcwd()
-    problem = problem_u.name()[0:4]
+    problem = problem_u.name()[0:-2]
     result_folder = working_folder + '\\' + folder + '\\' + problem + '_' + method_selection
 
     if not os.path.isdir(result_folder):
@@ -767,7 +767,7 @@ def save_before_reevaluation(problem_u, problem_l, xu, xl, fu, fl, seed_index,
 
 def save_function_evaluation(nfev, problem, seed_index, method_selection, folder):
     working_folder = os.getcwd()
-    problem = problem.name()[0:4]
+    problem = problem.name()[0:-2]
     result_folder = working_folder + '\\' + folder + '\\' + problem + '_' + method_selection
 
     if not os.path.isdir(result_folder):

@@ -853,7 +853,7 @@ class SMD10_F(Problem):
         self.p = p
         self.r = r
         self.q = q
-        self.opt = 0
+        self.opt = 4
 
         xu1_ubound = [10] * p
         xu1_lbound = [-5] * p
@@ -914,7 +914,7 @@ class SMD10_f(Problem):
         self.p = p
         self.q = q
         self.r = r
-        self.opt = 0
+        self.opt = 3
 
         xl1_u = [10] * q
         xl1_l = [-5] * q
@@ -969,7 +969,7 @@ class SMD11_F(Problem):
         self.p = p
         self.r = r
         self.q = q
-        self.opt = 0
+        self.opt = -1
 
         xu1_ubound = [10] * p
         xu1_lbound = [-5] * p
@@ -1022,7 +1022,7 @@ class SMD11_f(Problem):
         self.p = p
         self.q = q
         self.r = r
-        self.opt = 0
+        self.opt = 1
 
         xl1_u = [10] * q
         xl1_l = [-5] * q
@@ -1070,7 +1070,7 @@ class SMD12_F(Problem):
         self.p = p
         self.r = r
         self.q = q
-        self.opt = 0
+        self.opt = 3
 
         xu1_ubound = [10] * p
         xu1_lbound = [-5] * p
@@ -1135,7 +1135,7 @@ class SMD12_f(Problem):
         self.p = p
         self.q = q
         self.r = r
-        self.opt = 0
+        self.opt = 4
 
         xl1_u = [10] * q
         xl1_l = [-5] * q
