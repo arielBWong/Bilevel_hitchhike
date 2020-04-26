@@ -26,8 +26,8 @@
 "methods_ops": ["eim"],
 "alg_settings": {
                     "lower_interaction": 30,
-                    "stop": 30,
-                    "number_of_initial_samples": 20,
+                    "stop": 100,
+                    "number_of_initial_samples": 32,
                     "num_pop": 100,
                     "num_gen": 100,
                     "folder": "bi_output"

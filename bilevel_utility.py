@@ -326,6 +326,7 @@ def hybridsearch_on_trueEvaluation(ankor_x, level, other_x, true_problem):
 
 def localsearch_on_trueEvaluation(ankor_x, max_eval, level, other_x, true_problem):
     ankor_x = np.atleast_2d(ankor_x)
+    other_x = np.atleast_2d(other_x)
     ankor_x = check_array(ankor_x)
 
     def obj_func(x):
@@ -557,6 +558,20 @@ def save_accuracy(problem_u, problem_l, best_y_u, best_y_l, seed_index, method_s
     saveName = result_folder + '\\accuracy_' + str(seed_index) + '.csv'
     np.savetxt(saveName, s, delimiter=',')
 
+
+def save_feasibility(problem_u, problem_l, up_feas, low_feas, seed_index, method_selection, folder):
+    s = [up_feas, low_feas]
+    working_folder = os.getcwd()
+    problem = problem_u.name()[0:-2]
+    result_folder = working_folder + '\\' + folder + '\\' + problem + '_' + method_selection
+
+    if not os.path.isdir(result_folder):
+        os.mkdir(result_folder)
+    saveName = result_folder + '\\feasibility_' + str(seed_index) + '.csv'
+    np.savetxt(saveName, s, delimiter=',')
+
+
+
 # output each problem's output into one single table
 def results_process_bestf(BO_target_problems, method_selection, seedmax):
     import pandas as pd
@@ -564,11 +579,11 @@ def results_process_bestf(BO_target_problems, method_selection, seedmax):
     mean_data = []
     median_data = []
     pname_list =[]
-    for j in np.arange(0, 2, 2):
+    for j in np.arange(0, n, 2):
         target_problem = BO_target_problems[j]
         target_problem = eval(target_problem)
         problem_name = target_problem.name()
-        problem_name = problem_name[0:4]
+        problem_name = problem_name[0:-2]
         pname_list.append(problem_name)
         # print(problem_name)
         working_folder = os.getcwd()
@@ -600,13 +615,13 @@ def results_process_bestf(BO_target_problems, method_selection, seedmax):
     h.to_csv(saveName)
     h2.to_csv(saveName2)
 
-def combine_fev(BO_target_problems, method_selection):
+def combine_fev(BO_target_problems, method_selection, max_seed):
     import pandas as pd
     n = len(BO_target_problems)
 
     median_data = []
 
-    folders = ['bi_output', 'bi_local_output']
+    folders = ['bi_output']  #, 'bi_local_output']
     mean_cross_strategies = []
     for folder in folders:
         pname_list = []
@@ -615,17 +630,14 @@ def combine_fev(BO_target_problems, method_selection):
             target_problem = BO_target_problems[j]
             target_problem = eval(target_problem)
             problem_name = target_problem.name()
-            problem_name = problem_name[0:4]
+            problem_name = problem_name[0:-2]
             pname_list.append(problem_name)
             # print(problem_name)
             working_folder = os.getcwd()
-            # result_folder = working_folder + '\\bi_output' + '\\' + problem_name + '_' + method_selection
             result_folder = working_folder + '\\' + folder + '\\' + problem_name + '_' + method_selection
-            # result_folder = working_folder + '\\bi_local_output' + '\\' + problem_name + '_' + method_selection
 
             n_fev = []
-            for seed_index in range(11):
-                # saveName = result_folder + '\\accuracy_before_evaluation' + str(seed_index) + '.csv'
+            for seed_index in range(max_seed):
                 saveName = result_folder + '\\ll_nfev' + str(seed_index) + '.csv'
                 data = np.loadtxt(saveName, delimiter=',')
                 n_fev = np.append(n_fev, data)
@@ -635,16 +647,16 @@ def combine_fev(BO_target_problems, method_selection):
         mean_cross_strategies = np.append(mean_cross_strategies, mean_smds)
 
 
-    mean_cross_strategies = np.atleast_2d(mean_cross_strategies).reshape(-1, 2)
+    mean_cross_strategies = np.atleast_2d(mean_cross_strategies).reshape(-1, 1)
 
-    h = pd.DataFrame(mean_cross_strategies, columns=['Combined', 'Local only'], index=pname_list)
+    h = pd.DataFrame(mean_cross_strategies, columns=['lower level nfev'], index=pname_list)
     working_folder = os.getcwd()
     result_folder = working_folder + '\\bi_process'
-    saveName = result_folder + '\\compare_fev_median.csv'
+    saveName = result_folder + '\\nfev_median.csv'
     h.to_csv(saveName)
 
 
-def results_process_before_after(BO_target_problems, method_selection, alg_folder, accuracy_name):
+def results_process_before_after(BO_target_problems, method_selection, alg_folder, accuracy_name, seedmax):
     import pandas as pd
     n = len(BO_target_problems)
     mean_data = []
@@ -654,14 +666,14 @@ def results_process_before_after(BO_target_problems, method_selection, alg_folde
         target_problem = BO_target_problems[j]
         target_problem = eval(target_problem)
         problem_name = target_problem.name()
-        problem_name = problem_name[0:4]
+        problem_name = problem_name[0:-2]
         pname_list.append(problem_name)
         # print(problem_name)
         working_folder = os.getcwd()
         result_folder = working_folder + '\\' + alg_folder + '\\' + problem_name + '_' + method_selection
 
         accuracy_data = []
-        for seed_index in range(11):
+        for seed_index in range(seedmax):
             saveName = result_folder + '\\' + accuracy_name + '_' + str(seed_index) + '.csv'
             data = np.loadtxt(saveName, delimiter=',')
             accuracy_data = np.append(accuracy_data, data)
@@ -755,7 +767,7 @@ def save_before_reevaluation(problem_u, problem_l, xu, xl, fu, fl, seed_index,
     accuracy_l = np.abs(fl - problem_l.opt)
     s = [accuracy_u, accuracy_l]
     working_folder = os.getcwd()
-    problem = problem_u.name()[0:4]
+    problem = problem_u.name()[0:-2]
     result_folder = working_folder + '\\' + folder + '\\' + problem + '_' + method_selection
 
     if not os.path.isdir(result_folder):
@@ -922,15 +934,11 @@ if __name__ == "__main__":
         hyp = json.load(data_file)
     target_problems = hyp['BO_target_problems']
 
-    a = np.atleast_2d(np.random.rand(3, 4))
-    b = np.atleast_2d(np.random.rand(3, 4))
-    c = np.atleast_2d(np.random.rand(3, 4))
-    d = np.atleast_2d(np.random.rand(3, 4))
-
-    x, y, z, k = feasibility_adjustment(a, b, c, d, [True, True, False])
-    print(a)
-    print(x)
-
+    # in general post process
+    problems = target_problems[0: 8]
+    results_process_bestf(problems, 'eim', 29)
+    combine_fev(problems, 'eim', 29)
+    results_process_before_after(problems, 'eim', 'bi_output', 'accuracy', 29)
 
 
 
@@ -1027,21 +1035,6 @@ if __name__ == "__main__":
 
 
 
-
-    '''
-    score=[1,2,3,4,5]
-
-    with open("file.json", 'w') as f:
-        # indent=2 is not needed but makes the file more
-        # human-readable for more complicated data
- 
-        json.dump(score, f, indent=2)
-    
-    with open("file.json", 'r') as f:
-        score = json.load(f)
-
-    print(score)
-    '''
 
 
 

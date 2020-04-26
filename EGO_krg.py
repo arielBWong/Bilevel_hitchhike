@@ -25,7 +25,8 @@ from pymop.factory import get_uniform_weights
 from bilevel_utility import surrogate_search_for_nextx, save_converge_plot,\
     save_accuracy, search_for_matching_otherlevel_x,\
     save_before_reevaluation, save_function_evaluation, return_feasible,\
-    hybridsearch_on_trueEvaluation, nofeasible_select, feasibility_adjustment
+    hybridsearch_on_trueEvaluation, nofeasible_select, feasibility_adjustment,\
+    save_feasibility
 
 
 def return_current_extreme(train_x, train_y):
@@ -1437,6 +1438,8 @@ def main_bi_mo(seed_index, target_problem, enable_crossvalidation, method_select
     matching_fl = []
     count = 0
     feasible_check  = []
+
+    #-----------start of initialization---------------------
     for xu in train_x_u:
         count = count + 1
 
@@ -1473,6 +1476,8 @@ def main_bi_mo(seed_index, target_problem, enable_crossvalidation, method_select
     train_x_u, complete_x_u, complete_y_u, complete_c_u = \
         feasibility_adjustment(train_x_u, complete_x_u, complete_y_u, complete_c_u, feasible_check)
 
+    #--------------------- end of initialization ---------------------
+
     # create upper level eim search problem
     eim_u = EI.EIM(target_problem_u.n_levelvar, n_obj=1, n_constr=0,
                    upper_bound=target_problem_u.xu,
@@ -1505,15 +1510,6 @@ def main_bi_mo(seed_index, target_problem, enable_crossvalidation, method_select
                                              enable_crossvalidation,
                                              method_selection)
 
-
-        '''
-        matching_xl, matching_fl, n_fev_local, _, _ = \
-            localsearch_for_matching_otherlevel_x(searched_xu,
-                                                  150,
-                                                  'lower',
-                                                  target_problem_l,
-                                                  seed_index)
-        '''
         ll_nfev += n_fev_local
 
         # combine matching xl to xu for true evaluation
@@ -1587,10 +1583,12 @@ def main_bi_mo(seed_index, target_problem, enable_crossvalidation, method_select
         print('no feasible solution found on upper level')
         # nofeasible_select(constr_c, train_y, train_x):
         best_xu_complete, best_yu = nofeasible_select(complete_c_u, complete_y_u, complete_x_u)
-        best_xu_sofar = np.atleast_2d(best_xu_complete[0:target_problem_u.n_levelvar])
-        matching_xl = np.atleast_2d(best_xu_complete[target_problem_u.n_levelvar, :])
+        best_xu_sofar = best_xu_complete[0, 0:target_problem_u.n_levelvar]
+        matching_xl = best_xu_complete[0, target_problem_u.n_levelvar:]
         fu = best_yu
         fl = target_problem_l.evaluate(best_xu_complete, return_values_of=["F"])
+        fu = fu[0, 0]
+        fl = fl[0, 0]
         save_before_reevaluation(target_problem_u, target_problem_l, best_xu_sofar, matching_xl, fu, fl, seed_index,
                                  method_selection, folder)
 
@@ -1609,6 +1607,17 @@ def main_bi_mo(seed_index, target_problem, enable_crossvalidation, method_select
     duration = (end - start) / 60
     print('overall time used: %0.4f mins' % duration)
 
+    # save feasibility only for constraint problems
+    if target_problem_u.n_constr > 0:
+        upper_c = target_problem_u.evaluate(new_complete_x, return_values_of=["G"])
+        lower_c = target_problem_l.evaluate(new_complete_x, return_values_of=["G"])
+        up_feas = 0 if np.any(upper_c) > 0 else 1
+        low_feas = 0 if np.any(lower_c) > 0 else 1
+        save_feasibility(target_problem_u, target_problem_l, up_feas, low_feas, seed_index, method_selection, folder)
+
+
+
+
     final_fu = new_fu[0, 0]
     final_fl = new_fl[0, 0]
 
@@ -1623,7 +1632,9 @@ def paral_args_bi(target_problems, seed_max, cross_val, methods_ops, alg_setting
     # list of tuples
     args = []
     n = len(target_problems)
-    for seed in range(0, seed_max):
+    list_com = [3, 4, 14, 16, 17, 19, 28]
+    # for seed in range(0, seed_max):
+    for seed in list_com:
         for j in np.arange(6, 8, 2):
             for method in methods_ops:
                 target_problem = target_problems[j: j + 2]
@@ -1651,16 +1662,16 @@ if __name__ == "__main__":
     methods_ops = hyp['methods_ops']
     alg_settings = hyp['alg_settings']
 
-    para_run = False
+    para_run = True
     if para_run:
         seed_max = 29
         args = paral_args_bi(target_problems, seed_max, False, methods_ops, alg_settings)
-        num_workers = 6
+        num_workers = 22
         pool = mp.Pool(processes=num_workers)
         pool.starmap(main_bi_mo, ([arg for arg in args]))
     else:
         i = 6
-        main_bi_mo(0, target_problems[i:i+2], False, 'eim', alg_settings)
+        main_bi_mo(3, target_problems[i:i+2], False, 'eim', alg_settings)
 
 
 
