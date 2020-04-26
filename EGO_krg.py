@@ -1629,10 +1629,10 @@ def paral_args_bi(target_problems, seed_max, cross_val, methods_ops, alg_setting
     # list of tuples
     args = []
     n = len(target_problems)
-    list_com = [3, 4, 14, 16, 17, 19, 28]
-    # for seed in range(0, seed_max):
-    for seed in list_com:
-        for j in np.arange(6, 8, 2):
+    # list_com = [3, 4, 14, 16, 17, 19, 28]
+    for seed in range(0, seed_max):
+    # for seed in list_com:
+        for j in np.arange(0, 8, 2):
             for method in methods_ops:
                 target_problem = target_problems[j: j + 2]
                 args.append((seed, target_problem, cross_val, method, alg_settings))
@@ -1661,7 +1661,7 @@ if __name__ == "__main__":
 
     para_run = True
     if para_run:
-        seed_max = 29
+        seed_max = 11
         args = paral_args_bi(target_problems, seed_max, False, methods_ops, alg_settings)
         num_workers = 22
         pool = mp.Pool(processes=num_workers)
