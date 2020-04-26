@@ -1435,14 +1435,10 @@ def main_bi_mo(seed_index, target_problem, enable_crossvalidation, method_select
 
     # record matching f
     matching_xl = []
-    matching_fl = []
-    count = 0
     feasible_check  = []
 
     #-----------start of initialization---------------------
     for xu in train_x_u:
-        count = count + 1
-
         matching_x, matching_f, n_fev_local, feasible_flag = \
             search_for_matching_otherlevel_x(xu,
                                              lower_interation,
@@ -1472,7 +1468,7 @@ def main_bi_mo(seed_index, target_problem, enable_crossvalidation, method_select
         complete_y_u = target_problem_u.evaluate(complete_x_u, return_values_of=["F"])
         complete_c_u = None
 
-    # feasibility adjustment, if xl is infeasible, then that instance is deleted
+    # delete invalid xl/xu/f/c: feasibility adjustment, if xl is infeasible, then that instance is deleted
     train_x_u, complete_x_u, complete_y_u, complete_c_u = \
         feasibility_adjustment(train_x_u, complete_x_u, complete_y_u, complete_c_u, feasible_check)
 
@@ -1524,8 +1520,8 @@ def main_bi_mo(seed_index, target_problem, enable_crossvalidation, method_select
         print('iteration %d, yu true evaluated: %f' % (i, new_complete_yu))
 
         # double check with feasibility returned from other level
-        if target_problem_u.n_constr > 0 and feasible_flag == False:
-            print("found matching xl is not feasible, skip this addding training data")
+        if target_problem_u.n_constr > 0 and feasible_flag is False:
+            print("found matching xl is not feasible, skip this new xu, xl adding step")
         else:
             # adding new xu yu to training
             train_x_u = np.vstack((train_x_u, searched_xu))
@@ -1541,8 +1537,8 @@ def main_bi_mo(seed_index, target_problem, enable_crossvalidation, method_select
         # if evaluation limit is not reached, search for next xu
         searched_xu = \
             surrogate_search_for_nextx(train_x_u,
-                                       complete_y_u, # should be train_y_u, bad names
-                                       complete_c_u,
+                                       complete_y_u,  # should be train_y_u, bad names
+                                       complete_c_u,  # should be train_c_u, bad naming
                                        eim_u,
                                        num_pop,
                                        num_gen,
@@ -1558,7 +1554,8 @@ def main_bi_mo(seed_index, target_problem, enable_crossvalidation, method_select
     # now upper iteration is finished
     # conduct a local search based on fl
     if target_problem_u.n_constr > 0:
-        # return feasible, no c?
+        # return feasible, no feasible solutions refer to x
+        # but return y first is a bit annoying
         complete_y_u_feas, complete_x_u_feas = return_feasible(complete_c_u, complete_y_u, complete_x_u)
         complete_y_u_feas = np.atleast_2d(complete_y_u_feas).reshape(-1, target_problem_u.n_obj)
         complete_x_u_feas = np.atleast_2d(complete_x_u_feas).reshape(-1, target_problem_u.n_var)

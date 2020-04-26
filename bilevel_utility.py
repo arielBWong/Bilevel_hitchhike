@@ -934,6 +934,11 @@ if __name__ == "__main__":
         hyp = json.load(data_file)
     target_problems = hyp['BO_target_problems']
 
+    feasible_flag = False
+    a = 7
+    if a > 0 and feasible_flag is False:
+        print("found matching xl is not feasible, skip this addding training data")
+
     # in general post process
     problems = target_problems[0: 8]
     results_process_bestf(problems, 'eim', 29)
