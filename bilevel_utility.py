@@ -572,12 +572,11 @@ def save_feasibility(problem_u, problem_l, up_feas, low_feas, seed_index, method
 
 
 
-# output each problem's output into one single table
-def results_process_bestf(BO_target_problems, method_selection, seedmax):
+def results_process_bestf(BO_target_problems, method_selection, seedmax, folder):
     import pandas as pd
     n = len(BO_target_problems)
-    mean_data = []
-    median_data = []
+    median_across_problems = []
+    feas_across_problems = []
     pname_list =[]
     for j in np.arange(0, n, 2):
         target_problem = BO_target_problems[j]
@@ -587,9 +586,7 @@ def results_process_bestf(BO_target_problems, method_selection, seedmax):
         pname_list.append(problem_name)
         # print(problem_name)
         working_folder = os.getcwd()
-        result_folder = working_folder + '\\bi_output' + '\\' + problem_name + '_' + method_selection
-        # result_folder = working_folder + '\\bi_ego_output' + '\\' + problem_name + '_' + method_selection
-        # result_folder = working_folder + '\\bi_local_output' + '\\' + problem_name + '_' + method_selection
+        result_folder = working_folder + '\\' + folder + '\\' + problem_name + '_' + method_selection
 
         accuracy_data = []
         for seed_index in range(seedmax):
@@ -597,23 +594,53 @@ def results_process_bestf(BO_target_problems, method_selection, seedmax):
             saveName = result_folder + '\\accuracy_' + str(seed_index) + '.csv'
             data = np.loadtxt(saveName, delimiter=',')
             accuracy_data = np.append(accuracy_data, data)
+
         accuracy_data = np.atleast_2d(accuracy_data).reshape(-1, 2)
-        accuracy_mean = np.mean(accuracy_data, axis=0)
-        accuracy_median = np.median(accuracy_data, axis=0)
-        mean_data = np.append(mean_data, accuracy_mean)
-        median_data = np.append(median_data, accuracy_median)
 
-    mean_data = np.atleast_2d(mean_data).reshape(-1, 2)
-    median_data = np.atleast_2d(median_data).reshape(-1, 2)
+        # select median with ul and corresponding ll
+        ul_accuracy = np.array(accuracy_data[:, 0])
+        seed_median  = np.argsort(ul_accuracy)[int(seedmax/2)]
+        # accuracy_median is for one value
+        accuracy_median = accuracy_data[seed_median, :]
 
-    h = pd.DataFrame(mean_data, columns=['ul', 'll'], index=pname_list)
-    h2 = pd.DataFrame(median_data, columns=['ul', 'll'], index=pname_list)
+        # median_problems save for across problem
+        median_across_problems = np.append(median_across_problems, accuracy_median)
+
+        # make it compatible with contraint problems
+        if target_problem.n_constr > 0:
+            feasi_data = []  # feasibility across seeds
+            for seed_index in range(seedmax):
+                saveName = result_folder + '\\feasiblity_' + str(seed_index) + '.csv'
+                data = np.loadtxt(saveName, delimiter=',')
+                feasi_data = np.append(feasi_data, data)
+            feasi_data = np.atleast_2d(feasi_data).reshape(-1, 2)  # 2 -- as upper and lower feasibility
+            # pick up feasility corresponding to accuracy median
+            feasi_selected = feasi_data[seed_median, :]
+            feas_across_problems = np.append(feas_across_problems, feasi_selected)
+
+    median_across_problems = np.atleast_2d(median_across_problems).reshape(-1, 2)
+
+    # compatible with constraints
+    if target_problem.n_constr > 0:
+        feas_across_problems = np.atleast_2d(feas_across_problems).reshape(-1, 2)
+        acc_fesi_output = np.hstack((median_across_problems, feas_across_problems))
+        h1 = pd.DataFrame(acc_fesi_output, columns=['ul', 'll','ufeasi', 'lfeasi'], index=pname_list)
+        working_folder = os.getcwd()
+        result_folder = working_folder + '\\bi_process'
+        saveName1 = result_folder + '\\ego_accuracy_feasi_median.csv'
+        h1.to_csv(saveName1)
+        return None
+
+    h2 = pd.DataFrame(median_across_problems, columns=['ul', 'll'], index=pname_list)
     working_folder = os.getcwd()
     result_folder = working_folder + '\\bi_process'
-    saveName = result_folder + '\\ego_accuracy_mean.csv'
     saveName2 = result_folder + '\\ego_accuracy_median.csv'
-    h.to_csv(saveName)
     h2.to_csv(saveName2)
+
+
+
+
+
 
 def combine_fev(BO_target_problems, method_selection, max_seed):
     import pandas as pd
@@ -688,6 +715,7 @@ def results_process_before_after(BO_target_problems, method_selection, alg_folde
 
     return median_data
 
+# component function of outer_process
 def process_before_after(BO_target_problems, method_selection, alg_folder):
 
     n = len(BO_target_problems)
@@ -734,6 +762,7 @@ def process_before_after(BO_target_problems, method_selection, alg_folder):
            np.atleast_2d(fl_after).reshape(-1, 1)
 
 
+# entrance for process before/after
 def outer_process(BO_target_problems, method_selection):
     import pandas as pd
 
