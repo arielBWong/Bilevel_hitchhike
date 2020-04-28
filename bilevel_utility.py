@@ -161,20 +161,27 @@ def search_for_matching_otherlevel_x(x_other, search_iter, n_samples, problem, l
         # print('constr process')
         complete_y_feasible, train_x_feasible = return_feasible(complete_c, complete_y, train_x)
 
-    if len(complete_y_feasible) > 0:
-        complete_y = complete_y_feasible
-        train_x = train_x_feasible
+    if problem.n_constr > 0:
+        if len(complete_y_feasible) > 0:
+            complete_y = complete_y_feasible
+            train_x = train_x_feasible
+            best_y_index = np.argmin(complete_y)
+            best_x = train_x[best_y_index, :]
+            best_x = np.atleast_2d(best_x)
+            best_y = np.min(complete_y)
+        else:
+            print("no feasible found while ego on searching matching x")
+            best_x, best_y = nofeasible_select(complete_c, complete_y, train_x)
+            print("before local search, closest best y: %.4f" % best_y)
+    else:
         best_y_index = np.argmin(complete_y)
         best_x = train_x[best_y_index, :]
         best_x = np.atleast_2d(best_x)
         best_y = np.min(complete_y)
-    else:
-        print("no feasible found while ego on searching matching x")
-        best_x, best_y = nofeasible_select(complete_c, complete_y, train_x)
-        print("before local search, closest best y: %.4f" % best_y)
 
-    np.savetxt('xu.csv', x_other, delimiter=',')
-    np.savetxt('startx.csv', best_x, delimiter=',')
+
+    # np.savetxt('xu.csv', x_other, delimiter=',')
+    # np.savetxt('startx.csv', best_x, delimiter=',')
 
     # conduct local search with true evaluation
     localsearch_x, localsearch_f, n_fev = localsearch_on_trueEvaluation(best_x, 250, level, x_other, problem)
