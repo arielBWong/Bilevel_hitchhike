@@ -10,7 +10,7 @@ class BLTP1_F(Problem):
     def __init__(self, p=1, r=1, q=1):
         self.n_var = p + q + r * 2
         self.n_levelvar = p + r
-        self.n_constr = 0
+        self.n_constr = 1
         self.n_obj = 1
         self.p = p
         self.r = r
@@ -59,7 +59,7 @@ class BLTP1_f(Problem):
     def __init__(self, p=1, r=1, q=1):
         self.n_var = p + q + r * 2
         self.n_levelvar = q + r
-        self.n_constr = 0
+        self.n_constr = 2
         self.n_obj = 1
         self.p = p
         self.q = q
@@ -160,7 +160,7 @@ class BLTP2_f(Problem):
     def __init__(self, p=1, r=0, q=1):
         self.n_var = p + q + r * 2
         self.n_levelvar = q + r
-        self.n_constr = 0
+        self.n_constr = 3
         self.n_obj = 1
         self.p = p
         self.q = q
@@ -307,7 +307,7 @@ class BLTP4_F(Problem):
     def __init__(self, p=1, r=0, q=2):
         self.n_var = p + q + r * 2
         self.n_levelvar = p + r
-        self.n_constr = 0
+        self.n_constr = 2
         self.n_obj = 1
         self.p = p
         self.r = r
@@ -362,7 +362,7 @@ class BLTP4_f(Problem):
     def __init__(self, p=1, r=0, q=2):
         self.n_var = p + q + r * 2
         self.n_levelvar = q + r
-        self.n_constr = 0
+        self.n_constr = 2
         self.n_obj = 1
         self.p = p
         self.q = q
@@ -461,7 +461,7 @@ class BLTP5_f(Problem):
     def __init__(self, p=1, r=0, q=2):
         self.n_var = p + q + r * 2
         self.n_levelvar = q + r
-        self.n_constr = 0
+        self.n_constr = 4
         self.n_obj = 1
         self.p = p
         self.q = q
@@ -520,7 +520,7 @@ class BLTP6_F(Problem):
     def __init__(self, p=1, r=0, q=1):
         self.n_var = p + q + r * 2
         self.n_levelvar = p + r
-        self.n_constr = 0
+        self.n_constr = 1
         self.n_obj = 1
         self.p = p
         self.r = r
@@ -569,7 +569,7 @@ class BLTP6_f(Problem):
     def __init__(self, p=1, r=0, q=1):
         self.n_var = p + q + r * 2
         self.n_levelvar = q + r
-        self.n_constr = 0
+        self.n_constr = 1
         self.n_obj = 1
         self.p = p
         self.q = q

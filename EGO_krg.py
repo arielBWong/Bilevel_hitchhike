@@ -14,7 +14,7 @@ from cross_val_hyperp import cross_val_krg
 from joblib import dump, load
 import time
 from surrogate_problems import branin, GPc, Gomez3, Mystery, Reverse_Mystery, SHCBc, HS100, Haupt_schewefel, \
-                               MO_linearTest, single_krg_optim, WFG, iDTLZ, DTLZs, SMD, EI
+                               MO_linearTest, single_krg_optim, WFG, iDTLZ, DTLZs, SMD, EI, BLTP
 
 import os
 import copy
@@ -1471,6 +1471,9 @@ def main_bi_mo(seed_index, target_problem, enable_crossvalidation, method_select
     # delete invalid xl/xu/f/c: feasibility adjustment, if xl is infeasible, then that instance is deleted
     train_x_u, complete_x_u, complete_y_u, complete_c_u = \
         feasibility_adjustment(train_x_u, complete_x_u, complete_y_u, complete_c_u, feasible_check)
+    # ajustment of changes introduced by function feasibility_adjustment
+    if target_problem_u.n_constr == 0:
+        complete_c_u = None
 
     #--------------------- end of initialization ---------------------
 
@@ -1560,34 +1563,40 @@ def main_bi_mo(seed_index, target_problem, enable_crossvalidation, method_select
         complete_y_u_feas = np.atleast_2d(complete_y_u_feas).reshape(-1, target_problem_u.n_obj)
         complete_x_u_feas = np.atleast_2d(complete_x_u_feas).reshape(-1, target_problem_u.n_var)
 
-    if len(complete_y_u_feas) > 0:
-        # identify best feasible solution
-        min_fu_index = np.argmin(complete_y_u_feas)
-        # extract xu
-        best_xu_sofar = np.atleast_2d(complete_x_u_feas[min_fu_index, 0:target_problem_u.n_levelvar])
-        # extract xl
-        matching_xl = np.atleast_2d(complete_x_u_feas[min_fu_index, target_problem_u.n_levelvar:])
-        # for save fu
-        fu = complete_y_u_feas[min_fu_index, :]
-        # for save fl
-        best_complete_x = np.atleast_2d(complete_x_u_feas[min_fu_index, :])
-        fl = target_problem_l.evaluate(best_complete_x, return_values_of=["F"])
+    if target_problem_u.n_constr > 0:
+        if len(complete_y_u_feas) > 0:  # deal with feasible solutions
+            # identify best feasible solution
+            min_fu_index = np.argmin(complete_y_u_feas)
+            # extract xu
+            best_xu_sofar = np.atleast_2d(complete_x_u_feas[min_fu_index, 0:target_problem_u.n_levelvar])
+            # extract xl
+            matching_xl = np.atleast_2d(complete_x_u_feas[min_fu_index, target_problem_u.n_levelvar:])
+            # for save fu
+            fu = complete_y_u_feas[min_fu_index, :]
+            # for save fl
+            best_complete_x = np.atleast_2d(complete_x_u_feas[min_fu_index, :])
+            fl = target_problem_l.evaluate(best_complete_x, return_values_of=["F"])
 
-        save_before_reevaluation(target_problem_u, target_problem_l, best_xu_sofar, matching_xl, fu, fl, seed_index,
-                                 method_selection, folder)
-    else:
-
-        print('no feasible solution found on upper level')
-        # nofeasible_select(constr_c, train_y, train_x):
-        best_xu_complete, best_yu = nofeasible_select(complete_c_u, complete_y_u, complete_x_u)
-        best_xu_sofar = best_xu_complete[0, 0:target_problem_u.n_levelvar]
-        matching_xl = best_xu_complete[0, target_problem_u.n_levelvar:]
-        fu = best_yu
-        fl = target_problem_l.evaluate(best_xu_complete, return_values_of=["F"])
-        fu = fu[0, 0]
-        fl = fl[0, 0]
-        save_before_reevaluation(target_problem_u, target_problem_l, best_xu_sofar, matching_xl, fu, fl, seed_index,
-                                 method_selection, folder)
+            save_before_reevaluation(target_problem_u, target_problem_l, best_xu_sofar, matching_xl, fu, fl, seed_index,
+                                     method_selection, folder)
+        else:  # process situation where no feasible solutions
+            print('no feasible solution found on upper level')
+            # nofeasible_select(constr_c, train_y, train_x):
+            best_xu_complete, best_yu = nofeasible_select(complete_c_u, complete_y_u, complete_x_u)
+            best_xu_sofar = best_xu_complete[0, 0:target_problem_u.n_levelvar]
+            matching_xl = best_xu_complete[0, target_problem_u.n_levelvar:]
+            fu = best_yu
+            fl = target_problem_l.evaluate(best_xu_complete, return_values_of=["F"])
+            fu = fu[0, 0]
+            fl = fl[0, 0]
+            save_before_reevaluation(target_problem_u, target_problem_l, best_xu_sofar, matching_xl, fu, fl, seed_index,
+                                     method_selection, folder)
+    else:  # process for uncontraint problems
+        best_solution_index = np.argmin(complete_y_u)
+        best_xu_sofar = complete_x_u[best_solution_index, 0:target_problem_u.n_levelvar]
+        matching_xl = complete_x_u[best_solution_index, target_problem_u.n_levelvar:]
+        best_xu_sofar = np.atleast_2d(best_xu_sofar)
+        matching_xl = np.atleast_2d(matching_xl)
 
 
     # conduct a final local search based on best_xu_sofar
@@ -1632,7 +1641,7 @@ def paral_args_bi(target_problems, seed_max, cross_val, methods_ops, alg_setting
     # list_com = [3, 4, 14, 16, 17, 19, 28]
     for seed in range(0, seed_max):
     # for seed in list_com:
-        for j in np.arange(0, 8, 2):
+        for j in np.arange(0, 12, 2):
             for method in methods_ops:
                 target_problem = target_problems[j: j + 2]
                 args.append((seed, target_problem, cross_val, method, alg_settings))
@@ -1659,7 +1668,7 @@ if __name__ == "__main__":
     methods_ops = hyp['methods_ops']
     alg_settings = hyp['alg_settings']
 
-    para_run = True
+    para_run = False
     if para_run:
         seed_max = 11
         args = paral_args_bi(target_problems, seed_max, False, methods_ops, alg_settings)
@@ -1667,7 +1676,7 @@ if __name__ == "__main__":
         pool = mp.Pool(processes=num_workers)
         pool.starmap(main_bi_mo, ([arg for arg in args]))
     else:
-        i = 0
+        i = 4
         main_bi_mo(0, target_problems[i:i+2], False, 'eim', alg_settings)
 
 

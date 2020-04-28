@@ -981,11 +981,11 @@ if __name__ == "__main__":
     from surrogate_problems import BLTP
     seed = 1
     np.random.seed(seed)
-    target_problem_u = BLTP.BLTP5_F()  # p, r, q
-    target_problem_l = BLTP.BLTP5_f()  # p, r, q
+    target_problem_u = BLTP.BLTP6_F()  # p, r, q
+    target_problem_l = BLTP.BLTP6_f()  # p, r, q
 
-    xu, _, _ = init_xy(100, target_problem_u, seed, **{'problem_type':'bilevel'})
-    xl, _, _ = init_xy(100, target_problem_l, seed, **{'problem_type':'bilevel'})
+    xu, _, _ = init_xy(10, target_problem_u, seed, **{'problem_type':'bilevel'})
+    xl, _, _ = init_xy(10, target_problem_l, seed, **{'problem_type':'bilevel'})
     # visualization_smd3(problem, 0)
     np.savetxt('testxu.csv', xu, delimiter=',')
     np.savetxt('testxl.csv', xl, delimiter=',')
@@ -997,28 +997,4 @@ if __name__ == "__main__":
     f, g = target_problem_u.evaluate(x, return_values_of=['F', 'G'])
     print(f)
     print(g)
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 
