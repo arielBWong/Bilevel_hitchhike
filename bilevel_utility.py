@@ -610,7 +610,7 @@ def results_process_bestf(BO_target_problems, method_selection, seedmax, folder)
         if target_problem.n_constr > 0:
             feasi_data = []  # feasibility across seeds
             for seed_index in range(seedmax):
-                saveName = result_folder + '\\feasiblity_' + str(seed_index) + '.csv'
+                saveName = result_folder + '\\feasibility_' + str(seed_index) + '.csv'
                 data = np.loadtxt(saveName, delimiter=',')
                 feasi_data = np.append(feasi_data, data)
             feasi_data = np.atleast_2d(feasi_data).reshape(-1, 2)  # 2 -- as upper and lower feasibility
@@ -991,45 +991,6 @@ if __name__ == "__main__":
     print(f)
     print(g)
 
-    '''
-    test_f = []
-    # np.random.seed(seed_index)
-    x = []
-    nfev = []
-    for i in range(29):
-        np.random.seed(i)
-
-        target_problem_l = eval(target_problems[1])
-        eim_l = EI.EIM(target_problem_l.n_levelvar, n_obj=1, n_constr=target_problem_l.n_constr,
-                       upper_bound=target_problem_l.xu,
-                       lower_bound=target_problem_l.xl)
-
-        xu = np.atleast_2d([0., 0.])
-        kws = {'seed': i}
-        matching_x, matching_f, n_fev_local, _, _ = \
-            search_for_matching_otherlevel_x(xu,
-                                             30,
-                                             20,
-                                             target_problem_l,
-                                             'lower',
-                                             eim_l,
-                                             100,
-                                             100,
-                                             i,
-                                             False,
-                                             'eim',
-                                             **kws)
-        print(matching_x)
-        x = np.append(x, matching_x)
-        print(matching_f)
-
-        test_f = np.append(test_f, matching_f)
-        print(test_f)
-        nfev = np.append(nfev, n_fev_local-50)
-
-    x = np.atleast_2d(x).reshape(-1, 3)
-    f_median = np.argsort(test_f)
-    '''
 
 
 

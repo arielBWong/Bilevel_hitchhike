@@ -1608,8 +1608,8 @@ def main_bi_mo(seed_index, target_problem, enable_crossvalidation, method_select
     if target_problem_u.n_constr > 0:
         upper_c = target_problem_u.evaluate(new_complete_x, return_values_of=["G"])
         lower_c = target_problem_l.evaluate(new_complete_x, return_values_of=["G"])
-        up_feas = 0 if np.any(upper_c) > 0 else 1
-        low_feas = 0 if np.any(lower_c) > 0 else 1
+        up_feas = 0 if np.any(upper_c > 0) else 1
+        low_feas = 0 if np.any(lower_c > 0) else 1
         save_feasibility(target_problem_u, target_problem_l, up_feas, low_feas, seed_index, method_selection, folder)
 
 
@@ -1667,8 +1667,8 @@ if __name__ == "__main__":
         pool = mp.Pool(processes=num_workers)
         pool.starmap(main_bi_mo, ([arg for arg in args]))
     else:
-        i = 6
-        main_bi_mo(3, target_problems[i:i+2], False, 'eim', alg_settings)
+        i = 0
+        main_bi_mo(0, target_problems[i:i+2], False, 'eim', alg_settings)
 
 
 
