@@ -610,7 +610,7 @@ def results_process_bestf(BO_target_problems, method_selection, seedmax, folder)
         if target_problem.n_constr > 0:
             feasi_data = []  # feasibility across seeds
             for seed_index in range(seedmax):
-                saveName = result_folder + '\\feasiblity_' + str(seed_index) + '.csv'
+                saveName = result_folder + '\\feasibility_' + str(seed_index) + '.csv'
                 data = np.loadtxt(saveName, delimiter=',')
                 feasi_data = np.append(feasi_data, data)
             feasi_data = np.atleast_2d(feasi_data).reshape(-1, 2)  # 2 -- as upper and lower feasibility
@@ -963,16 +963,12 @@ if __name__ == "__main__":
         hyp = json.load(data_file)
     target_problems = hyp['BO_target_problems']
 
-    feasible_flag = False
-    a = 7
-    if a > 0 and feasible_flag is False:
-        print("found matching xl is not feasible, skip this addding training data")
 
     # in general post process
     problems = target_problems[0: 8]
-    results_process_bestf(problems, 'eim', 29)
-    combine_fev(problems, 'eim', 29)
-    results_process_before_after(problems, 'eim', 'bi_output', 'accuracy', 29)
+    results_process_bestf(problems, 'eim', 11,'bi_output')
+    combine_fev(problems, 'eim', 11)
+    # results_process_before_after(problems, 'eim', 'bi_output', 'accuracy', 29)
 
 
 
