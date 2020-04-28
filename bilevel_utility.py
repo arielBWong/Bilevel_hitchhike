@@ -963,41 +963,22 @@ if __name__ == "__main__":
         hyp = json.load(data_file)
     target_problems = hyp['BO_target_problems']
 
-    feasible_flag = False
-    a = 7
-    if a > 0 and feasible_flag is False:
-        print("found matching xl is not feasible, skip this addding training data")
-
     # in general post process
-    problems = target_problems[0: 8]
-    results_process_bestf(problems, 'eim', 29)
-    combine_fev(problems, 'eim', 29)
-    results_process_before_after(problems, 'eim', 'bi_output', 'accuracy', 29)
+    # ------------ result process--------------
+    # problems = target_problems[0: 8]
+    # results_process_bestf(problems, 'eim', 29)
+    # combine_fev(problems, 'eim', 29)
+    # results_process_before_after(problems, 'eim', 'bi_output', 'accuracy', 29)
+    # --------------result process ------------
 
-
-
-
-
-    # results_process_bestf(target_problems[0:2],'eim', 11)
-    # compare_python_matlab()
-    # plotCountour()
-
-    # problem
-
-
-    '''
-    problems_json = 'p/bi_problems'
-    with open(problems_json, 'r') as data_file:
-        hyp = json.load(data_file)
-    target_problems = hyp['BO_target_problems']
-
+    from surrogate_problems import BLTP
     seed = 1
     np.random.seed(seed)
-    target_problem_u = SMD.SMD12_F(1, 1, 2)  # p, r, q
-    target_problem_l = SMD.SMD12_f(1, 1, 2)  # p, r, q
+    target_problem_u = BLTP.BLTP5_F()  # p, r, q
+    target_problem_l = BLTP.BLTP5_f()  # p, r, q
 
-    xu, _, _ = init_xy(10, target_problem_u, seed, **{'problem_type':'bilevel'})
-    xl, _, _ = init_xy(10, target_problem_l, seed, **{'problem_type':'bilevel'})
+    xu, _, _ = init_xy(100, target_problem_u, seed, **{'problem_type':'bilevel'})
+    xl, _, _ = init_xy(100, target_problem_l, seed, **{'problem_type':'bilevel'})
     # visualization_smd3(problem, 0)
     np.savetxt('testxu.csv', xu, delimiter=',')
     np.savetxt('testxl.csv', xl, delimiter=',')
@@ -1006,9 +987,11 @@ if __name__ == "__main__":
     f, g = target_problem_l.evaluate(x, return_values_of=['F', 'G'])
     print(f)
     print(g)
+    f, g = target_problem_u.evaluate(x, return_values_of=['F', 'G'])
+    print(f)
+    print(g)
 
-
-    
+    '''
     test_f = []
     # np.random.seed(seed_index)
     x = []
@@ -1016,7 +999,7 @@ if __name__ == "__main__":
     for i in range(29):
         np.random.seed(i)
 
-        target_problem_l = eval(target_problem[1])
+        target_problem_l = eval(target_problems[1])
         eim_l = EI.EIM(target_problem_l.n_levelvar, n_obj=1, n_constr=target_problem_l.n_constr,
                        upper_bound=target_problem_l.xu,
                        lower_bound=target_problem_l.xl)
@@ -1046,21 +1029,9 @@ if __name__ == "__main__":
 
     x = np.atleast_2d(x).reshape(-1, 3)
     f_median = np.argsort(test_f)
-
-
-    save_name_p = 'save_local_results.csv'
-    save_name = 'save_nfev.csv'
-    np.savetxt(save_name_p, test_f, delimiter=',')
-    np.savetxt(save_name, nfev, delimiter=',')
-
-    # f_median = f_median[5]
-    # print(test_f[f_median])
-    # print(np.median(test_f))
-    # print(x[f_median, :])
-    # a = x[f_median,:]
-    # b = 2 + a[0]**2 - np.cos(2*np.pi * a[0]) + a[1]**2 - np.cos(2 * np.pi * a[1]) + np.tan(a[2])**2
-    # print(b)
     '''
+
+
 
 
 
