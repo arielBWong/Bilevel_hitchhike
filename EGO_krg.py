@@ -1618,10 +1618,17 @@ def main_bi_mo(seed_index, target_problem, enable_crossvalidation, method_select
     # save feasibility only for constraint problems
     if target_problem_u.n_constr > 0:
         upper_c = target_problem_u.evaluate(new_complete_x, return_values_of=["G"])
-        lower_c = target_problem_l.evaluate(new_complete_x, return_values_of=["G"])
         up_feas = 0 if np.any(upper_c > 0) else 1
+    else:
+        up_feas = 1
+
+    if target_problem_l.n_constr > 0:
+        lower_c = target_problem_l.evaluate(new_complete_x, return_values_of=["G"])
         low_feas = 0 if np.any(lower_c > 0) else 1
-        save_feasibility(target_problem_u, target_problem_l, up_feas, low_feas, seed_index, method_selection, folder)
+    else:
+        low_feas = 1
+
+    save_feasibility(target_problem_u, target_problem_l, up_feas, low_feas, seed_index, method_selection, folder)
 
 
 
