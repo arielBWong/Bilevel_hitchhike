@@ -1496,6 +1496,8 @@ def main_bi_mo(seed_index, target_problem, enable_crossvalidation, method_select
     # find lower level problem complete for this new pop_x
     for i in range(n_iter):
         print('iteration %d' % i)
+        if i == 13:
+            a = 0
         matching_xl, matching_fl, n_fev_local, feasible_flag = \
             search_for_matching_otherlevel_x(searched_xu,
                                              lower_interation,
@@ -1668,7 +1670,7 @@ if __name__ == "__main__":
     methods_ops = hyp['methods_ops']
     alg_settings = hyp['alg_settings']
 
-    para_run = True
+    para_run = False
     if para_run:
         seed_max = 1
         args = paral_args_bi(target_problems, seed_max, False, methods_ops, alg_settings)
@@ -1676,7 +1678,7 @@ if __name__ == "__main__":
         pool = mp.Pool(processes=num_workers)
         pool.starmap(main_bi_mo, ([arg for arg in args]))
     else:
-        i = 4
+        i = 0
         main_bi_mo(0, target_problems[i:i+2], False, 'eim', alg_settings)
 
 

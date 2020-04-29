@@ -21,7 +21,7 @@ from surrogate_problems import branin, GPc, Gomez3, Mystery, Reverse_Mystery, SH
 
 import os
 import json
-from copy import deepcopy
+import copy
 
 
 
@@ -186,7 +186,7 @@ def search_for_matching_otherlevel_x(x_other, search_iter, n_samples, problem, l
     # conduct local search with true evaluation
     localsearch_x, localsearch_f, n_fev = localsearch_on_trueEvaluation(best_x, 250, level, x_other, problem)
     n_fev = n_fev + search_iter + n_samples
-    print('local search before %.4f, after %.4f' % (best_y, localsearch_f))
+    print('local search %s, before %.4f, after %.4f' % (level, best_y, localsearch_f))
 
     # decide which x is returned
     if problem.n_constr > 0:
@@ -378,7 +378,8 @@ def nofeasible_select(constr_c, train_y, train_x):
     feas_closest = np.argmin(constr_c)
     return np.atleast_2d(train_x[feas_closest, :]), np.atleast_2d(train_y[feas_closest, :])
 
-def return_feasible(solutions_c, solutions_y, solution_x):
+def return_feasible(solutions_c_orig, solutions_y, solution_x):
+    solutions_c = copy.deepcopy(solutions_c_orig)
     sample_n = solutions_c.shape[0]
     a = np.linspace(0, sample_n - 1, sample_n, dtype=int)
     solutions_c[solutions_c <= 0] = 0
@@ -584,7 +585,7 @@ def results_process_bestf(BO_target_problems, method_selection, seedmax, folder)
     n = len(BO_target_problems)
     median_across_problems = []
     feas_across_problems = []
-    pname_list =[]
+    pname_list = []
     for j in np.arange(0, n, 2):
         target_problem = BO_target_problems[j]
         target_problem = eval(target_problem)
