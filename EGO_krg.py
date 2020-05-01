@@ -1475,6 +1475,10 @@ def main_bi_mo(seed_index, target_problem, enable_crossvalidation, method_select
     if target_problem_u.n_constr == 0:
         complete_c_u = None
 
+    test_all = np.hstack((complete_x_u, complete_y_u))
+    print('init function upper x-y')
+    print(test_all)
+
     #--------------------- end of initialization ---------------------
 
     # create upper level eim search problem
@@ -1496,8 +1500,6 @@ def main_bi_mo(seed_index, target_problem, enable_crossvalidation, method_select
     # find lower level problem complete for this new pop_x
     for i in range(n_iter):
         print('iteration %d' % i)
-        if i == 13:
-            a = 0
         matching_xl, matching_fl, n_fev_local, feasible_flag = \
             search_for_matching_otherlevel_x(searched_xu,
                                              lower_interation,
@@ -1523,6 +1525,9 @@ def main_bi_mo(seed_index, target_problem, enable_crossvalidation, method_select
             new_complete_yu = target_problem_u.evaluate(new_complete_xu, return_values_of=["F"])
             new_complete_cu = None
         print('iteration %d, yu true evaluated: %f' % (i, new_complete_yu))
+
+        print('each iteration upper x-y')
+        test_all = np.hstack((new_complete_xu, new_complete_yu))
 
         # double check with feasibility returned from other level
         if target_problem_u.n_constr > 0 and feasible_flag is False:
@@ -1670,7 +1675,8 @@ if __name__ == "__main__":
 
     # when dealing with different problems
     # load different problem json files
-    problems_json = 'p/bi_problems'
+    # problems_json = 'p/bi_problems'
+    problems_json = 'p/bi_problems_test'
     with open(problems_json, 'r') as data_file:
          hyp = json.load(data_file)
     target_problems = hyp['BO_target_problems']

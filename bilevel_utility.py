@@ -123,6 +123,7 @@ def search_for_matching_otherlevel_x(x_other, search_iter, n_samples, problem, l
     if problem.n_constr > 0:
         # print("constraint settings")
         complete_y, complete_c = problem.evaluate(complete_x, return_values_of=["F", "G"])
+
     else:
         complete_y = problem.evaluate(complete_x, return_values_of=["F"])
         complete_c = None
@@ -169,6 +170,7 @@ def search_for_matching_otherlevel_x(x_other, search_iter, n_samples, problem, l
             best_x = train_x[best_y_index, :]
             best_x = np.atleast_2d(best_x)
             best_y = np.min(complete_y)
+            best_c = problem.evaluate(np.hstack((np.atleast_2d(x_other), np.atleast_2d(best_x))), return_values_of=["G"])
         else:
             print("no feasible found while ego on searching matching x")
             best_x, best_y = nofeasible_select(complete_c, complete_y, train_x)
@@ -179,18 +181,24 @@ def search_for_matching_otherlevel_x(x_other, search_iter, n_samples, problem, l
         best_x = np.atleast_2d(best_x)
         best_y = np.min(complete_y)
 
-
-    # np.savetxt('xu.csv', x_other, delimiter=',')
-    # np.savetxt('startx.csv', best_x, delimiter=',')
-
     # conduct local search with true evaluation
     localsearch_x, localsearch_f, n_fev = localsearch_on_trueEvaluation(best_x, 250, level, x_other, problem)
     n_fev = n_fev + search_iter + n_samples
     print('local search %s, before %.4f, after %.4f' % (level, best_y, localsearch_f))
+    print('local search lx')
+    print(localsearch_x)
+    if len(complete_y_feasible) > 0:
+        print('feasible exist %0.4f'% x_other[0, 0])
+    else:
+        print('no feasible %0.4f' % x_other[0, 0])
+    lc = np.hstack((x_other, np.atleast_2d(localsearch_x)))
+    lc = problem.evaluate(lc, return_values_of=["G"])
+    print('constraint result')
+    print(lc)
 
     # decide which x is returned
     if problem.n_constr > 0:
-        # consider feasibility
+        # if feasible exists, decide on smaller f value
         if len(complete_y_feasible) > 0:
             feasible_flag = True
             if localsearch_f < best_y:
@@ -198,6 +206,8 @@ def search_for_matching_otherlevel_x(x_other, search_iter, n_samples, problem, l
             else:
                 return np.atleast_2d(best_x), np.atleast_2d(best_y), n_fev, feasible_flag
         # surrogate did not find any feasible solutions
+        # decide (1) local search has feasible return local results
+        # (2) local search has no feasible, flag infeasible, in ul will skip this solution
         else:
             # check feasibility of local search
             if level == 'lower':
@@ -982,11 +992,11 @@ if __name__ == "__main__":
     from surrogate_problems import BLTP
     seed = 1
     np.random.seed(seed)
-    target_problem_u = BLTP.BLTP8_F()  # p, r, q
-    target_problem_l = BLTP.BLTP8_f()  # p, r, q
+    target_problem_u = BLTP.BLTP6_F()  # p, r, q
+    target_problem_l = BLTP.BLTP6_f()  # p, r, q
 
-    xu, _, _ = init_xy(10, target_problem_u, seed, **{'problem_type':'bilevel'})
-    xl, _, _ = init_xy(10, target_problem_l, seed, **{'problem_type':'bilevel'})
+    xu, _, _ = init_xy(10, target_problem_u, seed, **{'problem_type': 'bilevel'})
+    xl, _, _ = init_xy(10, target_problem_l, seed, **{'problem_type': 'bilevel'})
     # visualization_smd3(problem, 0)
     np.savetxt('testxu.csv', xu, delimiter=',')
     np.savetxt('testxl.csv', xl, delimiter=',')
