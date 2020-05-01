@@ -312,7 +312,7 @@ class BLTP4_F(Problem):
         self.p = p
         self.r = r
         self.q = q
-        self.opt = 1000
+        self.opt = -1000
 
         if r != 0 or p != 1 or q != 2:
             raise(
@@ -367,7 +367,7 @@ class BLTP4_f(Problem):
         self.p = p
         self.q = q
         self.r = r
-        self.opt = 1
+        self.opt = -1
         if r != 0 or p != 1 or q != 2:
             raise(
                 "This problem only allow three variable each level"
@@ -623,7 +623,7 @@ class BLTP7_F(Problem):
         self.p = p
         self.r = r
         self.q = q
-        self.opt = 49
+        self.opt = -49
 
         if r != 0 or p != 1 or q != 1:
             raise(
@@ -670,7 +670,7 @@ class BLTP7_f(Problem):
         self.p = p
         self.q = q
         self.r = r
-        self.opt = -17
+        self.opt = 17
         if r != 0 or p != 1 or q != 1:
             raise(
                 "This problem only allow one variable each level"
@@ -827,7 +827,7 @@ class BLTP9_F(Problem):
         self.p = p
         self.r = r
         self.q = q
-        self.opt = 85.0909
+        self.opt = -85.0909
 
         if r != 0 or p != 1 or q != 1:
             raise(
@@ -874,7 +874,7 @@ class BLTP9_f(Problem):
         self.p = p
         self.q = q
         self.r = r
-        self.opt = -50.1818
+        self.opt = 50.1818
         if r != 0 or p != 1 or q != 1:
             raise(
                 "This problem only allow one variable each level"

@@ -974,8 +974,9 @@ if __name__ == "__main__":
 
     # in general post process
     # ------------ result process--------------
-    problems = target_problems[0: 30]
-    results_process_bestf(problems, 'eim', 11,'bi_output')
+    # problems = target_problems[0: 30]
+    problems = target_problems
+    results_process_bestf(problems, 'eim', 11, 'bi_output')
     combine_fev(problems, 'eim', 11)
     # results_process_before_after(problems, 'eim', 'bi_output', 'accuracy', 29)
     # --------------result process ------------
