@@ -1655,7 +1655,7 @@ def paral_args_bi(target_problems, seed_max, cross_val, methods_ops, alg_setting
     # list_com = [3, 4, 14, 16, 17, 19, 28]
     for seed in range(0, seed_max):
     # for seed in list_com:
-        for j in np.arange(12, 22, 2):
+        for j in np.arange(0, 30, 2):
             for method in methods_ops:
                 target_problem = target_problems[j: j + 2]
                 args.append((seed, target_problem, cross_val, method, alg_settings))
@@ -1683,11 +1683,11 @@ if __name__ == "__main__":
     methods_ops = hyp['methods_ops']
     alg_settings = hyp['alg_settings']
 
-    para_run = False
+    para_run = True
     if para_run:
-        seed_max = 1
+        seed_max = 11
         args = paral_args_bi(target_problems, seed_max, False, methods_ops, alg_settings)
-        num_workers = 6
+        num_workers = 22
         pool = mp.Pool(processes=num_workers)
         pool.starmap(main_bi_mo, ([arg for arg in args]))
     else:

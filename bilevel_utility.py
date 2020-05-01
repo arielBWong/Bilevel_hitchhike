@@ -17,7 +17,7 @@ from cross_val_hyperp import cross_val_krg
 from joblib import dump, load
 import time
 from surrogate_problems import branin, GPc, Gomez3, Mystery, Reverse_Mystery, SHCBc, HS100, Haupt_schewefel, \
-                               MO_linearTest, single_krg_optim, WFG, iDTLZ, DTLZs, SMD, EI, Surrogate_test
+                               MO_linearTest, single_krg_optim, WFG, iDTLZ, DTLZs, SMD, EI, Surrogate_test,BLTP
 
 import os
 import json
@@ -621,39 +621,40 @@ def results_process_bestf(BO_target_problems, method_selection, seedmax, folder)
         # accuracy_median is for one value
         accuracy_median = accuracy_data[seed_median, :]
 
-        # median_problems save for across problem
+        # median_problems save accuracy for across problem
         median_across_problems = np.append(median_across_problems, accuracy_median)
 
-        # make it compatible with contraint problems
-        if target_problem.n_constr > 0:
-            feasi_data = []  # feasibility across seeds
-            for seed_index in range(seedmax):
-                saveName = result_folder + '\\feasibility_' + str(seed_index) + '.csv'
-                data = np.loadtxt(saveName, delimiter=',')
-                feasi_data = np.append(feasi_data, data)
-            feasi_data = np.atleast_2d(feasi_data).reshape(-1, 2)  # 2 -- as upper and lower feasibility
-            # pick up feasility corresponding to accuracy median
-            feasi_selected = feasi_data[seed_median, :]
-            feas_across_problems = np.append(feas_across_problems, feasi_selected)
+        # all problems save feasibility
+        # even uncontraint problems
+        feasi_data = []  # feasibility across seeds
+        for seed_index in range(seedmax):
+            saveName = result_folder + '\\feasibility_' + str(seed_index) + '.csv'
+            data = np.loadtxt(saveName, delimiter=',')
+            feasi_data = np.append(feasi_data, data)
+        feasi_data = np.atleast_2d(feasi_data).reshape(-1, 2)  # 2 -- as upper and lower feasibility
+        # pick up feasility corresponding to accuracy median
+        feasi_selected = feasi_data[seed_median, :]
+        feas_across_problems = np.append(feas_across_problems, feasi_selected)
 
+    # re-arrange problem accuracy accross problems
     median_across_problems = np.atleast_2d(median_across_problems).reshape(-1, 2)
 
     # compatible with constraints
-    if target_problem.n_constr > 0:
-        feas_across_problems = np.atleast_2d(feas_across_problems).reshape(-1, 2)
-        acc_fesi_output = np.hstack((median_across_problems, feas_across_problems))
-        h1 = pd.DataFrame(acc_fesi_output, columns=['ul', 'll','ufeasi', 'lfeasi'], index=pname_list)
-        working_folder = os.getcwd()
-        result_folder = working_folder + '\\bi_process'
-        saveName1 = result_folder + '\\ego_accuracy_feasi_median.csv'
-        h1.to_csv(saveName1)
-        return None
 
-    h2 = pd.DataFrame(median_across_problems, columns=['ul', 'll'], index=pname_list)
+    feas_across_problems = np.atleast_2d(feas_across_problems).reshape(-1, 2)
+    acc_fesi_output = np.hstack((median_across_problems, feas_across_problems))
+    h1 = pd.DataFrame(acc_fesi_output, columns=['ul', 'll','ufeasi', 'lfeasi'], index=pname_list)
     working_folder = os.getcwd()
     result_folder = working_folder + '\\bi_process'
-    saveName2 = result_folder + '\\ego_accuracy_median.csv'
-    h2.to_csv(saveName2)
+    saveName1 = result_folder + '\\ego_accuracy_feasi_median.csv'
+    h1.to_csv(saveName1)
+    return None
+
+    # h2 = pd.DataFrame(median_across_problems, columns=['ul', 'll'], index=pname_list)
+    # working_folder = os.getcwd()
+    # result_folder = working_folder + '\\bi_process'
+    # saveName2 = result_folder + '\\ego_accuracy_median.csv'
+    # h2.to_csv(saveName2)
 
 
 
@@ -983,12 +984,13 @@ if __name__ == "__main__":
 
     # in general post process
     # ------------ result process--------------
-    # problems = target_problems[0: 8]
-    # results_process_bestf(problems, 'eim', 29)
-    # combine_fev(problems, 'eim', 29)
+    problems = target_problems[0: 30]
+    results_process_bestf(problems, 'eim', 11,'bi_output')
+    combine_fev(problems, 'eim', 11)
     # results_process_before_after(problems, 'eim', 'bi_output', 'accuracy', 29)
     # --------------result process ------------
 
+    '''
     from surrogate_problems import BLTP
     seed = 1
     np.random.seed(seed)
@@ -1008,4 +1010,5 @@ if __name__ == "__main__":
     f, g = target_problem_u.evaluate(x, return_values_of=['F', 'G'])
     print(f)
     print(g)
+    '''
 
