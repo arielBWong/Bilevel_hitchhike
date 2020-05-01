@@ -1410,7 +1410,7 @@ def main_bi_mo(seed_index, target_problem, enable_crossvalidation, method_select
 
     # number_of_initial_samples = 11 * n_vals - 1
     number_of_initial_samples = exp_settings['number_of_initial_samples']
-    n_iter = 100  # stopping criterion set
+    n_iter = 10000  # stopping criterion set
     converge_track = []
     folder = exp_settings['folder']
     lower_interation = exp_settings['lower_interaction']
@@ -1541,7 +1541,9 @@ def main_bi_mo(seed_index, target_problem, enable_crossvalidation, method_select
                complete_c_u = np.vstack((complete_c_u, new_complete_cu))
 
 
-        if i > stop-number_of_initial_samples-1:
+        # if i > stop-number_of_initial_samples-1:
+            # break
+        if ll_nfev > 15000:
             break
 
         # if evaluation limit is not reached, search for next xu
@@ -1655,7 +1657,7 @@ def paral_args_bi(target_problems, seed_max, cross_val, methods_ops, alg_setting
     # list_com = [3, 4, 14, 16, 17, 19, 28]
     for seed in range(0, seed_max):
     # for seed in list_com:
-        for j in np.arange(0, 30, 2):
+        for j in np.arange(0, n, 2):
             for method in methods_ops:
                 target_problem = target_problems[j: j + 2]
                 args.append((seed, target_problem, cross_val, method, alg_settings))
