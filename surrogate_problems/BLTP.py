@@ -367,7 +367,7 @@ class BLTP4_f(Problem):
         self.p = p
         self.q = q
         self.r = r
-        self.opt = 1
+        self.opt = -1
         if r != 0 or p != 1 or q != 2:
             raise(
                 "This problem only allow three variable each level"
@@ -1137,3 +1137,223 @@ class BLTP11_f(Problem):
 
         f = (xl1 - 5)**2
         out["F"] = f
+
+
+class BLTP12_F(Problem):
+
+    def __init__(self, p=1, r=1, q=1):
+        self.n_var = p + q + r * 2
+        self.n_levelvar = p + r
+        self.n_constr = 0
+        self.n_obj = 1
+        self.p = p
+        self.r = r
+        self.q = q
+        self.opt = -3.25
+
+        if r != 1 or p != 1 or q != 1:
+            raise(
+                "This problem only allow default variables"
+            )
+
+
+        xu1_ubound = [2] * p
+        xu1_lbound = [0] * p
+
+        xu2_ubound = [2] * r
+        xu2_lbound = [0] * r
+
+        self.xl = anp.array(xu1_lbound + xu2_lbound)
+        self.xu = anp.array(xu1_ubound + xu2_ubound)
+
+        super().__init__(n_var=self.n_var,
+                         n_obj=self.n_obj,
+                         n_constr=self.n_constr,
+                         xl=self.xl,
+                         xu=self.xu,
+                         type_var=anp.double)
+
+    def _evaluate(self, x, out, *args, **kwargs):
+        x = check_array(x)
+
+        xu1 = x[:, np.arange(0, self.p)]
+        xu2 = x[:,  np.arange(self.p, (self.p + self.r))]
+
+        xl1 = x[:,  np.arange((self.p + self.r), (self.p + self.r + self.q))]
+        xl2 = x[:,  np.arange((self.p + self.r + self.q), (self.p + self.r + self.q + self.r))]
+
+        F = -(2 * xu1 - xu2 - 0.5 * xl1)
+        out["F"] = F
+
+
+
+
+class BLTP12_f(Problem):
+
+    def __init__(self, p=1, r=1, q=1):
+        self.n_var = p + q + r * 2
+        self.n_levelvar = q + r
+        self.n_constr = 3
+        self.n_obj = 1
+        self.p = p
+        self.q = q
+        self.r = r
+        self.opt = -4
+        if r != 1 or p != 1 or q != 1:
+            raise(
+                "This problem only default variable each level"
+            )
+
+        xl1_u = [2] * q
+        xl1_l = [0] * q
+
+        xl2_u = [2] * r
+        xl2_l = [0] * r
+
+        self.xl = anp.array(xl1_l + xl2_l)
+        self.xu = anp.array(xl1_u + xl2_u)
+
+        super().__init__(n_var=self.n_var,
+                         n_obj=self.n_obj,
+                         n_constr=self.n_constr,
+                         xl=self.xl,
+                         xu=self.xu,
+                         type_var=anp.double)
+
+
+    def _evaluate(self, x, out, *args, **kwargs):
+        x = check_array(x)
+
+        xu1 = x[:, np.arange(0, self.p)]
+        xu2 = x[:, np.arange(self.p, (self.p + self.r))]
+
+        xl1 = x[:, np.arange((self.p + self.r), (self.p + self.r + self.q))]
+        xl2 = x[:, np.arange((self.p + self.r + self.q), (self.p + self.r + self.q + self.r))]
+
+        f = -(-xu1- xu2 + 4 * xl1 - xl2)
+        out["F"] = f
+
+        g = []
+        g1 = 2 * xu1 - xl1 + xl2 - 2.5
+        g1 = -g1
+        g = np.append(g, g1)
+        g2 = -xu1 + 3 * xu2 - xl2 + 2
+        g2 = -g2
+        g = np.append(g, g2)
+        g3 = -xu1 - xu2 + 2
+        g3 = -g3
+        g = np.append(g, g3)
+
+        g = np.atleast_2d(g).reshape(-1, 3, order='F')
+        out["G"] = g
+
+
+
+
+class BLTP13_F(Problem):
+
+    def __init__(self, p=1, r=1, q=1):
+        self.n_var = p + q + r * 2
+        self.n_levelvar = p + r
+        self.n_constr = 0
+        self.n_obj = 1
+        self.p = p
+        self.r = r
+        self.q = q
+        self.opt = -3.25
+
+        if r != 1 or p != 1 or q != 1:
+            raise(
+                "This problem only allow default variables"
+            )
+
+
+        xu1_ubound = [2] * p
+        xu1_lbound = [0] * p
+
+        xu2_ubound = [2] * r
+        xu2_lbound = [0] * r
+
+        self.xl = anp.array(xu1_lbound + xu2_lbound)
+        self.xu = anp.array(xu1_ubound + xu2_ubound)
+
+        super().__init__(n_var=self.n_var,
+                         n_obj=self.n_obj,
+                         n_constr=self.n_constr,
+                         xl=self.xl,
+                         xu=self.xu,
+                         type_var=anp.double)
+
+    def _evaluate(self, x, out, *args, **kwargs):
+        x = check_array(x)
+
+        xu1 = x[:, np.arange(0, self.p)]
+        xu2 = x[:,  np.arange(self.p, (self.p + self.r))]
+
+        xl1 = x[:,  np.arange((self.p + self.r), (self.p + self.r + self.q))]
+        xl2 = x[:,  np.arange((self.p + self.r + self.q), (self.p + self.r + self.q + self.r))]
+
+        F = -(2 * xu1 - xu2 - 0.5 * xl1)
+        out["F"] = F
+
+
+
+
+class BLTP13_f(Problem):
+
+    def __init__(self, p=1, r=1, q=1):
+        self.n_var = p + q + r * 2
+        self.n_levelvar = q + r
+        self.n_constr = 3
+        self.n_obj = 1
+        self.p = p
+        self.q = q
+        self.r = r
+        self.opt = -4
+        if r != 1 or p != 1 or q != 1:
+            raise(
+                "This problem only default variable each level"
+            )
+
+        xl1_u = [2] * q
+        xl1_l = [0] * q
+
+        xl2_u = [2] * r
+        xl2_l = [0] * r
+
+        self.xl = anp.array(xl1_l + xl2_l)
+        self.xu = anp.array(xl1_u + xl2_u)
+
+        super().__init__(n_var=self.n_var,
+                         n_obj=self.n_obj,
+                         n_constr=self.n_constr,
+                         xl=self.xl,
+                         xu=self.xu,
+                         type_var=anp.double)
+
+
+    def _evaluate(self, x, out, *args, **kwargs):
+        x = check_array(x)
+
+        xu1 = x[:, np.arange(0, self.p)]
+        xu2 = x[:, np.arange(self.p, (self.p + self.r))]
+
+        xl1 = x[:, np.arange((self.p + self.r), (self.p + self.r + self.q))]
+        xl2 = x[:, np.arange((self.p + self.r + self.q), (self.p + self.r + self.q + self.r))]
+
+        f = -(-xu1- xu2 + 4 * xl1 - xl2)
+        out["F"] = f
+
+        g = []
+        g1 = 2 * xu1 - xl1 + xl2 - 2.5
+        g1 = -g1
+        g = np.append(g, g1)
+        g2 = -xu1 + 3 * xu2 - xl2 + 2
+        g2 = -g2
+        g = np.append(g, g2)
+        g3 = -xu1 - xu2 + 2
+        g3 = -g3
+        g = np.append(g, g3)
+
+        g = np.atleast_2d(g).reshape(-1, 3, order='F')
+        out["G"] = g
