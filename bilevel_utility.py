@@ -170,8 +170,6 @@ def search_for_matching_otherlevel_x(x_other, search_iter, n_samples, problem, l
     if problem.n_constr > 0:
         # print('constr process')
         complete_y_feasible, train_x_feasible = return_feasible(complete_c, complete_y, train_x)
-
-    if problem.n_constr > 0:
         if len(complete_y_feasible) > 0:
             complete_y = complete_y_feasible
             train_x = train_x_feasible
@@ -179,7 +177,6 @@ def search_for_matching_otherlevel_x(x_other, search_iter, n_samples, problem, l
             best_x = train_x[best_y_index, :]
             best_x = np.atleast_2d(best_x)
             best_y = np.min(complete_y)
-            best_c = problem.evaluate(np.hstack((np.atleast_2d(x_other), np.atleast_2d(best_x))), return_values_of=["G"])
         else:
             print("no feasible found while ego on searching matching x")
             best_x, best_y = nofeasible_select(complete_c, complete_y, train_x)
@@ -193,53 +190,67 @@ def search_for_matching_otherlevel_x(x_other, search_iter, n_samples, problem, l
     # conduct local search with true evaluation
     localsearch_x, localsearch_f, n_fev = localsearch_on_trueEvaluation(best_x, 250, level, x_other, problem)
     n_fev = n_fev + search_iter + n_samples
-    print('local search %s, before %.4f, after %.4f' % (level, best_y, localsearch_f))
+
+    print('local search %s level, before %.4f, after %.4f' % (level, best_y, localsearch_f))
     print('local search lx')
     print(localsearch_x)
-    if len(complete_y_feasible) > 0:
-        print('feasible exist %0.4f'% x_other[0, 0])
-    else:
-        print('no feasible %0.4f' % x_other[0, 0])
-    lc = np.hstack((x_other, np.atleast_2d(localsearch_x)))
-    lc = problem.evaluate(lc, return_values_of=["G"])
-    print('constraint result')
-    print(lc)
+
+    if problem.n_constr > 0:
+        if len(complete_y_feasible) > 0:
+            print('feasible exist after surrogate for upper xu %0.4f' % x_other[0, 0])
+        else:
+            print('no feasible after surrogate for upper xu %0.4f' % x_other[0, 0])
+
+
 
     # decide which x is returned
     if problem.n_constr > 0:
-        # if feasible exists, decide on smaller f value
+        # check feasibility of local search
+        if level == 'lower':
+            c = problem.evaluate(np.hstack((x_other, np.atleast_2d(localsearch_x))), return_values_of=["G"])
+        else:
+            c = problem.evaluate(np.hstack((np.atleast_2d(localsearch_x), x_other)), return_values_of=["G"])
+        print('local search return constraint:')
+        print(c)
+
+        # surrogate found feasible, consider local returns feasible
+        # decide on smaller f value
         if len(complete_y_feasible) > 0:
-            feasible_flag = True
-            if localsearch_f < best_y:
-                return localsearch_x, localsearch_f, n_fev, feasible_flag
+            if np.any(c > 0):   # surrogate has feasible, local search has no
+                print('surrogate returns feasible, but local search not, return surrogate results')
+                print('surrogate constraint output is:')
+                sc = problem.evaluate(np.hstack((x_other, np.atleast_2d(best_x))), return_values_of=["G"])
+                print(sc)
+                return_tuple = (np.atleast_2d(best_x), np.atleast_2d(best_y), n_fev, True)
             else:
-                return np.atleast_2d(best_x), np.atleast_2d(best_y), n_fev, feasible_flag
+                print('both surrogate and local search returns feasible, return smaller one')
+                feasible_flag = True
+                return_tuple = (localsearch_x, localsearch_f, n_fev, feasible_flag) \
+                    if localsearch_f < best_y \
+                    else (np.atleast_2d(best_x), np.atleast_2d(best_y), n_fev, feasible_flag)
         # surrogate did not find any feasible solutions
         # decide (1) local search has feasible return local results
-        # (2) local search has no feasible, flag infeasible, in ul will skip this solution
+        # (2) local search has no feasible, flag infeasible, return whatever xl fl
         else:
-            # check feasibility of local search
-            if level == 'lower':
-                c = problem.evaluate(np.hstack((x_other, np.atleast_2d(localsearch_x))), return_values_of=["G"])
-            else:
-                c = problem.evaluate(np.hstack((np.atleast_2d(localsearch_x), x_other)), return_values_of=["G"])
-            # double check feasibility
-            # c[np.abs(c) < 1e-10] = 0
-            if np.any(c > 0) and localsearch_f < best_y:
-                # no feasible function found
-                print('local search returned infeasible')
+            # localsearch also finds no feasible
+            # only  flag matters, as this solution on upper level will be ignored or set 1e6
+            if np.any(c > 0):
+                print('local search also has no feasible solution, return false flag')
                 feasible_flag = False
-                return localsearch_x, localsearch_f, n_fev, feasible_flag
-            elif localsearch_f < best_y:
-                feasible_flag = True
-                return localsearch_x, localsearch_f, n_fev, feasible_flag
+                return_tuple = (localsearch_x, localsearch_f, n_fev, feasible_flag)
+            else:  # local search found feasible while surrogate did not
+                print('local search found feasible while surrogate did not')
+                return_tuple = (localsearch_x, localsearch_f, n_fev, True)
     # no-constraint problem process
-    elif localsearch_f < best_y:
-        return localsearch_x, localsearch_f, n_fev, True
+    else:
+        return_tuple = (localsearch_x, localsearch_f, n_fev, True) \
+            if localsearch_f < best_y \
+            else (np.atleast_2d(best_x), np.atleast_2d(best_y), n_fev, True)
+
+    return return_tuple[0], return_tuple[1], return_tuple[2], return_tuple[3]
 
 
-    print('local search is not able to find better matching x, y')
-    return np.atleast_2d(best_x), np.atleast_2d(best_y), n_fev, True
+
 
 
 def localsearch_for_matching_otherlevel_x(x_other, max_eval, search_level, problem, seed_index):
@@ -984,6 +995,12 @@ def plotCountour():
     fig.colorbar(cs, ax=ax)
     plt.show()
 
+def test_if(a,b):
+    a = (True, False) if a>b else (False, True)
+    return zip(a)
+
+
+
 if __name__ == "__main__":
 
 
@@ -991,6 +1008,9 @@ if __name__ == "__main__":
     with open(problems_json, 'r') as data_file:
         hyp = json.load(data_file)
     target_problems = hyp['BO_target_problems']
+    a = np.array([[-6.43056099e+00 -1.56943901e+00 -8.00000000e+00 -8.70414851e-14]])
+    b = np.any(a>0)
+    print(b)
 
     # in general post process
     # ------------ result process--------------
