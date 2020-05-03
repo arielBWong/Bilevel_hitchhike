@@ -31,3 +31,13 @@ num_workers = 22
 pool = mp.Pool(processes=num_workers)
 pool.starmap(main_bi_mo, ([arg for arg in args]))
 ```
+
+## bug fix log ##
+Compatible problem with BLTP5. BLTP5 is a problem only having lower level constraints.
+Previous version had two logic bugs. 
+1. One is at the matching xl search, wrong logic is thinking local search always return feasible, if surrogate gives it a feasible start. In fact, it can still return infeasible even with a feasible start.
+2.  At the upper level adding new train x step, I used the following condition. It ignored that upper level is unconstraint problem while lower level is constraint. So it will take both feasible and infeasible solutions to build surrogate
+```python
+if feasible_flag is False and problem.n_const>0:
+```
+3 Still at the matching xl search, another bug is that in previous tedious version, this condition happens
