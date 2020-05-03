@@ -107,6 +107,15 @@ def feasibility_adjustment(part_x, combine_x, combine_y, combine_c, feasibility)
     combine_c = np.delete(combine_c, infeasible_index, axis=0)
     return part_x, combine_x, combine_y, combine_c
 
+# infeasible values are set high
+def feasibility_adjustment_2(part_x, combine_x, combine_y, combine_c, feasibility):
+    feasibility = np.array(feasibility)
+    infeasible_index = np.argwhere(feasibility == False)
+    infeasible_index = infeasible_index.ravel()
+    combine_y[infeasible_index, :] = 1e6
+    return part_x, combine_x, combine_y, combine_c
+
+
 def search_for_matching_otherlevel_x(x_other, search_iter, n_samples, problem, level, eim, eim_pop, eim_gen,  seed_index, enable_crossvalidation, method_selection, **kwargs):
     train_x, train_y, cons_y = init_xy(n_samples, problem, seed_index,
                                              **{'problem_type': 'bilevel'})
@@ -215,6 +224,7 @@ def search_for_matching_otherlevel_x(x_other, search_iter, n_samples, problem, l
             else:
                 c = problem.evaluate(np.hstack((np.atleast_2d(localsearch_x), x_other)), return_values_of=["G"])
             # double check feasibility
+            # c[np.abs(c) < 1e-10] = 0
             if np.any(c > 0) and localsearch_f < best_y:
                 # no feasible function found
                 print('local search returned infeasible')
@@ -991,11 +1001,12 @@ if __name__ == "__main__":
     # --------------result process ------------
 
 
+
     from surrogate_problems import BLTP
     seed = 1
     np.random.seed(seed)
-    target_problem_u = BLTP.BLTP12_F()  # p, r, q
-    target_problem_l = BLTP.BLTP12_f()  # p, r, q
+    target_problem_u = BLTP.BLTP5_F()  # p, r, q
+    target_problem_l = BLTP.BLTP5_f()  # p, r, q
 
     xu, _, _ = init_xy(30, target_problem_u, seed, **{'problem_type': 'bilevel'})
     xl, _, _ = init_xy(30, target_problem_l, seed, **{'problem_type': 'bilevel'})
@@ -1010,5 +1021,6 @@ if __name__ == "__main__":
     f, g = target_problem_u.evaluate(x, return_values_of=['F', 'G'])
     print(f)
     print(g)
+
 
 

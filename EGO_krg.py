@@ -25,7 +25,7 @@ from pymop.factory import get_uniform_weights
 from bilevel_utility import surrogate_search_for_nextx, save_converge_plot,\
     save_accuracy, search_for_matching_otherlevel_x,\
     save_before_reevaluation, save_function_evaluation, return_feasible,\
-    hybridsearch_on_trueEvaluation, nofeasible_select, feasibility_adjustment,\
+    hybridsearch_on_trueEvaluation, nofeasible_select, feasibility_adjustment_2,\
     save_feasibility
 
 
@@ -1435,7 +1435,7 @@ def main_bi_mo(seed_index, target_problem, enable_crossvalidation, method_select
 
     # record matching f
     matching_xl = []
-    feasible_check  = []
+    feasible_check = []
 
     #-----------start of initialization---------------------
     for xu in train_x_u:
@@ -1470,14 +1470,14 @@ def main_bi_mo(seed_index, target_problem, enable_crossvalidation, method_select
 
     # delete invalid xl/xu/f/c: feasibility adjustment, if xl is infeasible, then that instance is deleted
     train_x_u, complete_x_u, complete_y_u, complete_c_u = \
-        feasibility_adjustment(train_x_u, complete_x_u, complete_y_u, complete_c_u, feasible_check)
+        feasibility_adjustment_2(train_x_u, complete_x_u, complete_y_u, complete_c_u, feasible_check)
     # ajustment of changes introduced by function feasibility_adjustment
     if target_problem_u.n_constr == 0:
         complete_c_u = None
 
-    test_all = np.hstack((complete_x_u, complete_y_u))
-    print('init function upper x-y')
-    print(test_all)
+    # test_all = np.hstack((complete_x_u, complete_y_u))
+    # print('init function upper x-y')
+    # print(test_all)
 
     #--------------------- end of initialization ---------------------
 
@@ -1530,8 +1530,14 @@ def main_bi_mo(seed_index, target_problem, enable_crossvalidation, method_select
         test_all = np.hstack((new_complete_xu, new_complete_yu))
 
         # double check with feasibility returned from other level
-        if target_problem_u.n_constr > 0 and feasible_flag is False:
+        if feasible_flag is False:
             print("found matching xl is not feasible, skip this new xu, xl adding step")
+            train_x_u = np.vstack((train_x_u, searched_xu))
+            complete_x_u = np.vstack((complete_x_u, new_complete_xu))
+            upper_bound = np.atleast_2d[1e6]
+            complete_y_u = np.vstack((complete_y_u, upper_bound))
+            if target_problem_u.n_constr > 0:
+                complete_c_u = np.vstack((complete_c_u, new_complete_cu))
         else:
             # adding new xu yu to training
             train_x_u = np.vstack((train_x_u, searched_xu))
@@ -1541,10 +1547,10 @@ def main_bi_mo(seed_index, target_problem, enable_crossvalidation, method_select
                complete_c_u = np.vstack((complete_c_u, new_complete_cu))
 
 
-        # if i > stop-number_of_initial_samples-1:
-            # break
-        if ll_nfev > 15000:
+        if i > stop-number_of_initial_samples-1:
             break
+        # if ll_nfev > 15000:
+            # break
 
         # if evaluation limit is not reached, search for next xu
         searched_xu = \
@@ -1685,7 +1691,7 @@ if __name__ == "__main__":
     methods_ops = hyp['methods_ops']
     alg_settings = hyp['alg_settings']
 
-    para_run = True
+    para_run = False
     if para_run:
         seed_max = 11
         args = paral_args_bi(target_problems, seed_max, False, methods_ops, alg_settings)

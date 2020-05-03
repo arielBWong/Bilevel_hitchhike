@@ -1,10 +1,7 @@
 {
-"BO_target_problems": [ "BLTP.BLTP4_F()",
-                        "BLTP.BLTP4_f()",
-                        "BLTP.BLTP7_F()",
-                        "BLTP.BLTP7_f()",
-                        "BLTP.BLTP9_F()",
-                        "BLTP.BLTP9_f()"],
+"BO_target_problems": [ "BLTP.BLTP5_F()",
+                        "BLTP.BLTP5_f()"
+                      ],
 "methods_ops": ["eim"],
 "alg_settings": {
                     "lower_interaction": 30,
