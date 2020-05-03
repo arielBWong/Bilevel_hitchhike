@@ -40,4 +40,4 @@ Previous version had two logic bugs.
 ```python
 if feasible_flag is False and problem.n_const>0:
 ```
-3 Still at the matching xl search, another bug is that in previous tedious version, this condition happens
+
