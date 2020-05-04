@@ -325,6 +325,12 @@ def hybridsearch_on_trueEvaluation(ankor_x, level, other_x, true_problem):
         "other_x": other_x
     }
     bounds = np.vstack((true_problem.xl, true_problem.xu)).T.tolist()
+    print('before EA search')
+
+    f, g = true_problem.evaluate(np.atleast_2d(np.hstack((other_x, ankor_x))), return_values_of=['F', 'G'])
+    print('fl value is: %.4f' % f)
+    print('cons value is ')
+    print(g)
 
     # call for global evaluation
     '''
@@ -357,8 +363,36 @@ def hybridsearch_on_trueEvaluation(ankor_x, level, other_x, true_problem):
     best_x = pop_x[0]
     best_f = pop_f[0]
 
+
+    # check feasibility
+    best_x = np.atleast_2d(best_x)
+    f, c = true_problem.evaluate(np.hstack((other_x, best_x)), return_values_of=['F', 'G'])
+    print('after EA true evaluation: ')
+    print('fl value is: %.4f' % f)
+    print('cons value is ')
+    print(c)
+    if np.any(c > 0):
+        print('EA returns infeasible ')
+    else:
+        print('EA returns feasible solutions')
+
     best_x, best_f, nfev = localsearch_on_trueEvaluation(best_x, 250, "lower", other_x, true_problem)
     nfev = nfev + 20*50
+
+    best_x = np.atleast_2d(best_x)
+    f, c = true_problem.evaluate(np.hstack((other_x, best_x)),  return_values_of=['F', 'G'])
+    print('after local search true evaluation: ')
+    print('fl value is: %.4f' % f)
+    print('cons value is ')
+    print(c)
+    if np.any(c > 0):
+        print('local search returns infeasible ')
+    else:
+        print('local search returns feasible')
+
+
+
+
     return best_x, best_f, nfev
 
 
@@ -616,6 +650,7 @@ def results_process_bestf(BO_target_problems, method_selection, seedmax, folder)
     n = len(BO_target_problems)
     median_across_problems = []
     feas_across_problems = []
+    median_seed_accrossProblems = []
     pname_list = []
     for j in np.arange(0, n, 2):
         target_problem = BO_target_problems[j]
@@ -644,6 +679,7 @@ def results_process_bestf(BO_target_problems, method_selection, seedmax, folder)
 
         # median_problems save accuracy for across problem
         median_across_problems = np.append(median_across_problems, accuracy_median)
+        median_seed_accrossProblems = np.append(median_seed_accrossProblems, seed_median)
 
         # all problems save feasibility
         # even uncontraint problems
@@ -659,12 +695,14 @@ def results_process_bestf(BO_target_problems, method_selection, seedmax, folder)
 
     # re-arrange problem accuracy accross problems
     median_across_problems = np.atleast_2d(median_across_problems).reshape(-1, 2)
+    median_seed_accrossProblems = np.atleast_2d(median_seed_accrossProblems).reshape(-1, 1)
+
 
     # compatible with constraints
 
     feas_across_problems = np.atleast_2d(feas_across_problems).reshape(-1, 2)
-    acc_fesi_output = np.hstack((median_across_problems, feas_across_problems))
-    h1 = pd.DataFrame(acc_fesi_output, columns=['ul', 'll','ufeasi', 'lfeasi'], index=pname_list)
+    acc_fesi_output = np.hstack((median_across_problems, feas_across_problems, median_seed_accrossProblems))
+    h1 = pd.DataFrame(acc_fesi_output, columns=['ul', 'll','ufeasi', 'lfeasi', 'seed'], index=pname_list)
     working_folder = os.getcwd()
     result_folder = working_folder + '\\bi_process'
     saveName1 = result_folder + '\\ego_accuracy_feasi_median.csv'
@@ -1004,24 +1042,68 @@ def test_if(a,b):
 if __name__ == "__main__":
 
 
-    problems_json = 'p/bi_problems'
+    # problems_json = 'p/bi_problems'
+    problems_json = 'p/bi_problems_test'
     with open(problems_json, 'r') as data_file:
         hyp = json.load(data_file)
     target_problems = hyp['BO_target_problems']
-    a = np.array([[-6.43056099e+00 -1.56943901e+00 -8.00000000e+00 -8.70414851e-14]])
-    b = np.any(a>0)
-    print(b)
+
 
     # in general post process
     # ------------ result process--------------
-    # problems = target_problems[0: 30]
-    # results_process_bestf(problems, 'eim', 11,'bi_output')
-    #combine_fev(problems, 'eim', 11)
+    # problems = target_problems
+    # results_process_bestf(problems, 'eim', 11, 'bi_output')
+    # combine_fev(problems, 'eim', 11)
     # results_process_before_after(problems, 'eim', 'bi_output', 'accuracy', 29)
     # --------------result process ------------
 
+    # check with prblem BLTP5
+    # x_u = np.atleast_2d([17.0/9.0])
+    x_u = np.atleast_2d([1.80783])
+    x_l = np.atleast_2d([[0.86488, 0.00]])
+    problems = target_problems[0:2]
+    target_problem_u = eval(problems[0])
+    target_problem_l = eval(problems[1])
+
+    eim_l = EI.EIM(target_problem_l.n_levelvar, n_obj=1, n_constr=0,
+                   upper_bound=target_problem_l.xu,
+                   lower_bound=target_problem_l.xl)
+
+    # matching_x, matching_f, n_fev_local, feasible_flag = \
+    #     search_for_matching_otherlevel_x(x_u, 30, 20, target_problem_l, 'lower', eim_l, 100, 100, 0, False, 'eim')
+
+    localsearch_xl, localsearch_fl, local_fev = \
+        hybridsearch_on_trueEvaluation(np.atleast_2d([0.86488, 0.00]), 'lower', x_u, target_problem_l)
+
+    new_complete_x = np.hstack((np.atleast_2d(x_u), np.atleast_2d(localsearch_xl)))
+    new_fl = target_problem_l.evaluate(new_complete_x, return_values_of=["F"])
+    new_fu = target_problem_u.evaluate(new_complete_x, return_values_of=["F"])
+    print('fu after re-valuation')
+    print(new_fu)
+
+    old_complete_x = np.hstack((np.atleast_2d(x_u), np.atleast_2d(x_l)))
+    old_fu = target_problem_u.evaluate(old_complete_x, return_values_of=["F"])
+    print('fu before re-valuation')
+    print(old_fu)
+
+    x_uopt = np.atleast_2d([17.0/9.0])
+    x_lopt = np.atleast_2d([8/9, 0])
+    x_best = np.hstack((x_uopt, x_lopt))
+    fl_opt, gl_opt = target_problem_l.evaluate(x_best, return_values_of=["F", "G"])
+    fu_opt = target_problem_u.evaluate(x_best, return_values_of=["F"])
+    print('best upper level f: %.5f' % fu_opt)
+    print('best lower level f: %.5f' % fl_opt)
+    print('best lower level constrait')
+    print(gl_opt)
 
 
+
+
+
+
+
+
+    '''
     from surrogate_problems import BLTP
     seed = 1
     np.random.seed(seed)
@@ -1041,6 +1123,7 @@ if __name__ == "__main__":
     f, g = target_problem_u.evaluate(x, return_values_of=['F', 'G'])
     print(f)
     print(g)
+    '''
 
 
 

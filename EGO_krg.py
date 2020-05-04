@@ -26,7 +26,7 @@ from bilevel_utility import surrogate_search_for_nextx, save_converge_plot,\
     save_accuracy, search_for_matching_otherlevel_x,\
     save_before_reevaluation, save_function_evaluation, return_feasible,\
     hybridsearch_on_trueEvaluation, nofeasible_select, feasibility_adjustment_2,\
-    save_feasibility
+    save_feasibility,  feasibility_adjustment
 
 
 def return_current_extreme(train_x, train_y):
@@ -1471,7 +1471,7 @@ def main_bi_mo(seed_index, target_problem, enable_crossvalidation, method_select
     # delete invalid xl/xu/f/c: feasibility adjustment, if xl is infeasible, then that instance is deleted
     train_x_u, complete_x_u, complete_y_u, complete_c_u = \
         feasibility_adjustment_2(train_x_u, complete_x_u, complete_y_u, complete_c_u, feasible_check)
-    # ajustment of changes introduced by function feasibility_adjustment
+    # adjustment of changes introduced by function feasibility_adjustment
     if target_problem_u.n_constr == 0:
         complete_c_u = None
 
@@ -1500,8 +1500,6 @@ def main_bi_mo(seed_index, target_problem, enable_crossvalidation, method_select
     # find lower level problem complete for this new pop_x
     for i in range(n_iter):
         print('iteration %d' % i)
-        if i ==16:
-            a = 0
         matching_xl, matching_fl, n_fev_local, feasible_flag = \
             search_for_matching_otherlevel_x(searched_xu,
                                              lower_interation,
@@ -1548,11 +1546,10 @@ def main_bi_mo(seed_index, target_problem, enable_crossvalidation, method_select
             if target_problem_u.n_constr > 0:
                complete_c_u = np.vstack((complete_c_u, new_complete_cu))
 
-
         if i > stop-number_of_initial_samples-1:
             break
         # if ll_nfev > 15000:
-            # break
+           #  break
 
         # if evaluation limit is not reached, search for next xu
         searched_xu = \
