@@ -9,7 +9,7 @@ from EI_krg import expected_improvement
 if __name__ == "__main__":
 
     n_samples = 5
-    n_iterations = 10
+    n_iterations = 8
     test_f = Surrogate_test.f()
     eim = \
         EI.EIM(test_f.n_var, n_obj=1, n_constr=test_f.n_constr,

@@ -346,7 +346,7 @@ class BLTP4_F(Problem):
         xl2 = x[:,  np.arange((self.p + self.r + self.q), (self.p + self.r + self.q + self.r))]
 
         F = -(100 * xu1 + 1000 * np.atleast_2d(xl1[:, 0]).reshape(-1, 1))
-        out["F"] = -F
+        out["F"] = F
 
         g = []
         g1 = xu1.ravel() + xl1[:, 0] - xl1[:, 1] - 1

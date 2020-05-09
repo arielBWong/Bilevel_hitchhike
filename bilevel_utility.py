@@ -3,25 +3,17 @@ import matplotlib.pyplot as plt
 from matplotlib.lines import Line2D
 import matplotlib.pyplot as plt
 import optimizer_EI
-import pygmo as pg
-from pymop.factory import get_problem_from_func
-from pymop import ZDT1, ZDT2, ZDT3, ZDT4, ZDT6, \
-                  DTLZ1, DTLZ2,\
-                  BNH, Carside, Kursawe, OSY, Truss2D, WeldedBeam, TNK
-from EI_krg import acqusition_function, close_adjustment
 from sklearn.utils.validation import check_array
 import scipy
-from sklearn.metrics import pairwise_distances
 import pyDOE
 from cross_val_hyperp import cross_val_krg
-from joblib import dump, load
-import time
 from surrogate_problems import branin, GPc, Gomez3, Mystery, Reverse_Mystery, SHCBc, HS100, Haupt_schewefel, \
                                MO_linearTest, single_krg_optim, WFG, iDTLZ, DTLZs, SMD, EI, Surrogate_test,BLTP
 
 import os
 import json
 import copy
+import joblib
 
 
 
@@ -192,7 +184,7 @@ def search_for_matching_otherlevel_x(x_other, search_iter, n_samples, problem, l
     n_fev = n_fev + search_iter + n_samples
 
     print('local search %s level, before %.4f, after %.4f' % (level, best_y, localsearch_f))
-    print('local search lx')
+    print('local search found lx')
     print(localsearch_x)
 
     if problem.n_constr > 0:
@@ -212,6 +204,7 @@ def search_for_matching_otherlevel_x(x_other, search_iter, n_samples, problem, l
             c = problem.evaluate(np.hstack((np.atleast_2d(localsearch_x), x_other)), return_values_of=["G"])
         print('local search return constraint:')
         print(c)
+        c[np.abs(c) < 1e-10] = 0
 
         # surrogate found feasible, consider local returns feasible
         # decide on smaller f value
@@ -371,10 +364,10 @@ def hybridsearch_on_trueEvaluation(ankor_x, level, other_x, true_problem):
     print('fl value is: %.4f' % f)
     print('cons value is ')
     print(c)
-    if np.any(c > 0):
-        print('EA returns infeasible ')
-    else:
-        print('EA returns feasible solutions')
+    # if np.any(c > 0):
+        # print('EA returns infeasible ')
+    # else:
+        # print('EA returns feasible solutions')
 
     best_x, best_f, nfev = localsearch_on_trueEvaluation(best_x, 250, "lower", other_x, true_problem)
     nfev = nfev + 20*50
@@ -385,10 +378,11 @@ def hybridsearch_on_trueEvaluation(ankor_x, level, other_x, true_problem):
     print('fl value is: %.4f' % f)
     print('cons value is ')
     print(c)
-    if np.any(c > 0):
-        print('local search returns infeasible ')
-    else:
-        print('local search returns feasible')
+    # c[np.abs(c) < 1e-10] = 0
+    # if np.any(c > 0):
+        # print('local search returns infeasible ')
+    # else:
+        # print('local search returns feasible')
 
 
 
@@ -504,7 +498,7 @@ def surrogate_search_for_nextx(train_x, train_y, train_c, eim, eim_pop, eim_gen,
                                              flag=False,
                                              **para)
     pop_x = reverse_with_zscore(pop_x, x_mean, x_std)
-    return pop_x
+    return pop_x, krg, krg_g
 
 
 def save_for_count_evaluation(x, train_x, level, x_evaluated):
@@ -630,6 +624,72 @@ def save_accuracy(problem_u, problem_l, best_y_u, best_y_l, seed_index, method_s
         os.mkdir(result_folder)
     saveName = result_folder + '\\accuracy_' + str(seed_index) + '.csv'
     np.savetxt(saveName, s, delimiter=',')
+
+def saveKRGmodel(krg, krg_g, folder, problem_u):
+    problem = problem_u.name()[0:-2]
+    working_folder = os.getcwd()
+    result_folder = working_folder + '\\' + folder + '\\' + problem + '_krgmodels'
+    if not os.path.isdir(result_folder):
+        os.mkdir(result_folder)
+    krgmodel_save = result_folder + 'krg.joblib'
+    joblib.dump(krg, krgmodel_save)
+
+    krgmodel_save = result_folder + 'krg_g.joblib'
+    joblib.dump(krg_g, krgmodel_save)
+
+
+def saveEGOtraining(complete_xu, complete_yu, folder, problem_u):
+
+    problem = problem_u.name()[0:-2]
+    working_folder = os.getcwd()
+    result_folder = working_folder + '\\' + folder + '\\' + problem + '_sampleddata'
+    if not os.path.isdir(result_folder):
+        os.mkdir(result_folder)
+    egodata_save = result_folder + '\\sampled_data_x.csv'
+    np.savetxt(egodata_save, complete_xu, delimiter=',')
+
+    egodata_save = result_folder + '\\sampled_data_y.csv'
+    np.savetxt(egodata_save, complete_yu, delimiter=',')
+
+def EGO_rebuildplot(problem_u, folder):
+    # load data
+    problem = problem_u.name()[0:-2]
+    working_folder = os.getcwd()
+    result_folder = working_folder + '\\' + folder + '\\' + problem + '_sampleddata'
+    name_x = result_folder + '\\sampled_data_x.csv'
+    name_y = result_folder + '\\sampled_data_y.csv'
+
+    complete_x = np.loadtxt(name_x, delimiter=',')
+    complete_y = np.loadtxt(name_y, delimiter=',')
+
+    complete_x = np.atleast_2d(complete_x)
+    train_y = np.atleast_2d(complete_y).reshape(-1, 1)
+    train_x = np.atleast_2d(complete_x[:, 0]).reshape(-1, 1)
+
+    test_x, _ ,_ = init_xy(1000, problem_u, 0, **{'problem_type': 'bilevel'})
+
+    train_x_norm, x_mean, x_std = norm_by_zscore(train_x)
+    train_y_norm, y_mean, y_std = norm_by_zscore(train_y)
+
+    train_x_norm = np.atleast_2d(train_x_norm)
+    train_y_norm = np.atleast_2d(train_y_norm)
+
+    krg, krg_g = cross_val_krg(train_x_norm, train_y_norm, None, False)
+
+    # plot result
+    test_x_norm = norm_by_exist_zscore(test_x, x_mean, x_std)
+
+    pred_y_norm, pred_y_sig_norm = krg[0].predict(test_x_norm)
+    pred_y = reverse_with_zscore(pred_y_norm, y_mean, y_std)
+
+    # ------------------------------
+    fig = plt.figure()
+    ax1 = fig.add_subplot(111)
+    ax1.set_xlabel('design variable')
+    ax1.set_ylabel('predicted f value')
+    # ax1.set_ylim(-2, 10)
+    ax1.scatter(test_x, pred_y)
+    plt.show()
 
 
 def save_feasibility(problem_u, problem_l, up_feas, low_feas, seed_index, method_selection, folder):
@@ -1034,7 +1094,7 @@ def plotCountour():
     plt.show()
 
 def test_if(a,b):
-    a = (True, False) if a>b else (False, True)
+    a = (True, False) if a > b else (False, True)
     return zip(a)
 
 
@@ -1047,6 +1107,10 @@ if __name__ == "__main__":
     with open(problems_json, 'r') as data_file:
         hyp = json.load(data_file)
     target_problems = hyp['BO_target_problems']
+    problem_u = eval(target_problems[0])
+
+    EGO_rebuildplot(problem_u, 'bi_output')
+
 
 
     # in general post process
@@ -1057,9 +1121,10 @@ if __name__ == "__main__":
     # results_process_before_after(problems, 'eim', 'bi_output', 'accuracy', 29)
     # --------------result process ------------
 
+
     # check with prblem BLTP5
-    # x_u = np.atleast_2d([17.0/9.0])
-    x_u = np.atleast_2d([1.80783])
+    x_u = np.atleast_2d([17.0/9.0])
+    # x_u = np.atleast_2d([1.80783])
     x_l = np.atleast_2d([[0.86488, 0.00]])
     problems = target_problems[0:2]
     target_problem_u = eval(problems[0])
@@ -1069,11 +1134,15 @@ if __name__ == "__main__":
                    upper_bound=target_problem_l.xu,
                    lower_bound=target_problem_l.xl)
 
-    # matching_x, matching_f, n_fev_local, feasible_flag = \
-    #     search_for_matching_otherlevel_x(x_u, 30, 20, target_problem_l, 'lower', eim_l, 100, 100, 0, False, 'eim')
+    matching_x, matching_f, n_fev_local, feasible_flag = \
+        search_for_matching_otherlevel_x(x_u, 30, 20, target_problem_l, 'lower', eim_l, 100, 100, 0, False, 'eim')
+
+    localsearch_xl = matching_x
+
+    print('lowerlevel search returns feasibility: %d' % feasible_flag)
 
     localsearch_xl, localsearch_fl, local_fev = \
-        hybridsearch_on_trueEvaluation(np.atleast_2d([0.86488, 0.00]), 'lower', x_u, target_problem_l)
+        hybridsearch_on_trueEvaluation(x_l, 'lower', x_u, target_problem_l)
 
     new_complete_x = np.hstack((np.atleast_2d(x_u), np.atleast_2d(localsearch_xl)))
     new_fl = target_problem_l.evaluate(new_complete_x, return_values_of=["F"])
@@ -1102,13 +1171,12 @@ if __name__ == "__main__":
 
 
 
-
     '''
     from surrogate_problems import BLTP
     seed = 1
     np.random.seed(seed)
-    target_problem_u = BLTP.BLTP5_F()  # p, r, q
-    target_problem_l = BLTP.BLTP5_f()  # p, r, q
+    target_problem_u = BLTP.BLTP9_F()  # p, r, q
+    target_problem_l = BLTP.BLTP9_f()  # p, r, q
 
     xu, _, _ = init_xy(30, target_problem_u, seed, **{'problem_type': 'bilevel'})
     xl, _, _ = init_xy(30, target_problem_l, seed, **{'problem_type': 'bilevel'})
@@ -1124,6 +1192,7 @@ if __name__ == "__main__":
     print(f)
     print(g)
     '''
+
 
 
 
