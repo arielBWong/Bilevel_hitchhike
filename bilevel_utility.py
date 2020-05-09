@@ -130,7 +130,7 @@ def search_for_matching_otherlevel_x(x_other, search_iter, n_samples, problem, l
         complete_c = None
 
     for i in range(search_iter):
-        new_x = \
+        new_x, _, _ = \
             surrogate_search_for_nextx(
                 train_x,
                 complete_y,
@@ -625,17 +625,20 @@ def save_accuracy(problem_u, problem_l, best_y_u, best_y_l, seed_index, method_s
     saveName = result_folder + '\\accuracy_' + str(seed_index) + '.csv'
     np.savetxt(saveName, s, delimiter=',')
 
-def saveKRGmodel(krg, krg_g, folder, problem_u):
+def saveKRGmodel(krg, krg_g, folder, problem_u, seed_index):
     problem = problem_u.name()[0:-2]
     working_folder = os.getcwd()
     result_folder = working_folder + '\\' + folder + '\\' + problem + '_krgmodels'
     if not os.path.isdir(result_folder):
         os.mkdir(result_folder)
-    krgmodel_save = result_folder + 'krg.joblib'
+    krgmodel_save = result_folder + '\\krg_' + str(seed_index) + '.joblib'
     joblib.dump(krg, krgmodel_save)
 
-    krgmodel_save = result_folder + 'krg_g.joblib'
+    krgmodel_save = result_folder + '\\krg_g_' + str(seed_index) + '.joblib'
     joblib.dump(krg_g, krgmodel_save)
+
+def rebuild_surrogate_and_plot():
+    print('not yet need to re-run')
 
 
 def saveEGOtraining(complete_xu, complete_yu, folder, problem_u):
@@ -1109,19 +1112,22 @@ if __name__ == "__main__":
     target_problems = hyp['BO_target_problems']
     problem_u = eval(target_problems[0])
 
-    EGO_rebuildplot(problem_u, 'bi_output')
+    # EGO_rebuildplot(problem_u, 'bi_output')
+
 
 
 
     # in general post process
     # ------------ result process--------------
-    # problems = target_problems
-    # results_process_bestf(problems, 'eim', 11, 'bi_output')
+    problems = target_problems
+    folder = hyp['alg_settings']['folder']
+    results_process_bestf(problems, 'eim', 11, folder)
     # combine_fev(problems, 'eim', 11)
     # results_process_before_after(problems, 'eim', 'bi_output', 'accuracy', 29)
     # --------------result process ------------
 
 
+    '''
     # check with prblem BLTP5
     x_u = np.atleast_2d([17.0/9.0])
     # x_u = np.atleast_2d([1.80783])
@@ -1163,12 +1169,8 @@ if __name__ == "__main__":
     print('best upper level f: %.5f' % fu_opt)
     print('best lower level f: %.5f' % fl_opt)
     print('best lower level constrait')
-    print(gl_opt)
-
-
-
-
-
+    print(gl_opt) 
+    '''
 
 
     '''

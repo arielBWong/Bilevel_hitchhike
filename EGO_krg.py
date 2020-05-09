@@ -1497,6 +1497,7 @@ def main_bi_mo(seed_index, target_problem, enable_crossvalidation, method_select
                                    method_selection,
                                    enable_crossvalidation)
 
+
     # find lower level problem complete for this new pop_x
     for i in range(n_iter):
         print('iteration %d' % i)
@@ -1637,8 +1638,6 @@ def main_bi_mo(seed_index, target_problem, enable_crossvalidation, method_select
 
     save_feasibility(target_problem_u, target_problem_l, up_feas, low_feas, seed_index, method_selection, folder)
 
-
-
     final_fu = new_fu[0, 0]
     final_fl = new_fl[0, 0]
 
@@ -1650,8 +1649,7 @@ def main_bi_mo(seed_index, target_problem, enable_crossvalidation, method_select
     # EGO training data save
     saveEGOtraining(complete_x_u, complete_y_u, folder, target_problem_u)
     # EGO model save
-    saveKRGmodel(krg, krg_g, folder, target_problem_u)
-
+    saveKRGmodel(krg, krg_g, folder, target_problem_u, seed_index)
     return None
 
 
@@ -1668,6 +1666,23 @@ def paral_args_bi(target_problems, seed_max, cross_val, methods_ops, alg_setting
                 target_problem = target_problems[j: j + 2]
                 args.append((seed, target_problem, cross_val, method, alg_settings))
     return args
+
+def paral_args_temp(target_problems, seed_max, cross_val, methods_ops, alg_settings):
+    # this function has one seed for each problem to construct parallel argument
+    # the reason for doing this is:
+    # only re-run the median result for each problem
+    # to save surrogate model during the re-run
+    args = []
+    n = len(target_problems)
+    seedlist = [2, 0, 5, 8, 1, 6, 5, 6, 5, 6, 9]
+    seed = 0
+    for j in np.arange(0, n, 2):
+        for method in methods_ops:
+            target_problem = target_problems[j: j + 2]
+            args.append((seedlist[seed], target_problem, cross_val, method, alg_settings))
+        seed = seed + 1
+    return args
+
 
 
 def para_args_si(target_problems, seed_max, cross_val, method_ops):
@@ -1692,11 +1707,12 @@ if __name__ == "__main__":
     alg_settings = hyp['alg_settings']
 
 
-    para_run = False
+    para_run = True
     if para_run:
         seed_max = 1
-        args = paral_args_bi(target_problems, seed_max, False, methods_ops, alg_settings)
-        num_workers = 2
+        # args = paral_args_bi(target_problems, seed_max, False, methods_ops, alg_settings)
+        args = paral_args_temp(target_problems, seed_max, False, methods_ops, alg_settings)
+        num_workers = 11
         pool = mp.Pool(processes=num_workers)
         pool.starmap(main_bi_mo, ([arg for arg in args]))
     else:
