@@ -130,7 +130,7 @@ def search_for_matching_otherlevel_x(x_other, search_iter, n_samples, problem, l
         complete_c = None
 
     for i in range(search_iter):
-        new_x = \
+        new_x, _, _ = \
             surrogate_search_for_nextx(
                 train_x,
                 complete_y,
@@ -1109,9 +1109,7 @@ if __name__ == "__main__":
     target_problems = hyp['BO_target_problems']
     problem_u = eval(target_problems[0])
 
-    EGO_rebuildplot(problem_u, 'bi_output')
-
-
+    # EGO_rebuildplot(problem_u, 'bi_output')
 
     # in general post process
     # ------------ result process--------------
@@ -1122,6 +1120,7 @@ if __name__ == "__main__":
     # --------------result process ------------
 
 
+    '''
     # check with prblem BLTP5
     x_u = np.atleast_2d([17.0/9.0])
     # x_u = np.atleast_2d([1.80783])
@@ -1164,12 +1163,7 @@ if __name__ == "__main__":
     print('best lower level f: %.5f' % fl_opt)
     print('best lower level constrait')
     print(gl_opt)
-
-
-
-
-
-
+    '''
 
     '''
     from surrogate_problems import BLTP
@@ -1190,8 +1184,9 @@ if __name__ == "__main__":
     print(g)
     f, g = target_problem_u.evaluate(x, return_values_of=['F', 'G'])
     print(f)
-    print(g)
+    print(g)   
     '''
+
 
 
 

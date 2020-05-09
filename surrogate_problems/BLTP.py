@@ -1252,7 +1252,7 @@ class BLTP12_f(Problem):
 
 class BLTP13_F(Problem):
 
-    def __init__(self, p=1, r=1, q=1):
+    def __init__(self, p=2, r=0, q=3):
         self.n_var = p + q + r * 2
         self.n_levelvar = p + r
         self.n_constr = 0
@@ -1260,18 +1260,18 @@ class BLTP13_F(Problem):
         self.p = p
         self.r = r
         self.q = q
-        self.opt = -3.25
+        self.opt = -29.2
 
-        if r != 1 or p != 1 or q != 1:
+        if r != 0 or p != 2 or q != 3:
             raise(
                 "This problem only allow default variables"
             )
 
 
-        xu1_ubound = [2] * p
+        xu1_ubound = [1] * p
         xu1_lbound = [0] * p
 
-        xu2_ubound = [2] * r
+        xu2_ubound = [1] * r
         xu2_lbound = [0] * r
 
         self.xl = anp.array(xu1_lbound + xu2_lbound)
@@ -1293,15 +1293,15 @@ class BLTP13_F(Problem):
         xl1 = x[:,  np.arange((self.p + self.r), (self.p + self.r + self.q))]
         xl2 = x[:,  np.arange((self.p + self.r + self.q), (self.p + self.r + self.q + self.r))]
 
-        F = -(2 * xu1 - xu2 - 0.5 * xl1)
-        out["F"] = F
+        F = 8 * xu1[:, 0] + 4 * xu1[:, 1] - 4 * xl1[:, 0] + 40 * xl1[:, 1] + 4 * xl1[:, 2]
+        out["F"] = -F
 
 
 
 
 class BLTP13_f(Problem):
 
-    def __init__(self, p=1, r=1, q=1):
+    def __init__(self, p=2, r=0, q=3):
         self.n_var = p + q + r * 2
         self.n_levelvar = q + r
         self.n_constr = 3
@@ -1309,16 +1309,16 @@ class BLTP13_f(Problem):
         self.p = p
         self.q = q
         self.r = r
-        self.opt = -4
-        if r != 1 or p != 1 or q != 1:
+        self.opt = 3.2
+        if r != 0 or p != 2 or q != 3:
             raise(
-                "This problem only default variable each level"
+                "This problem only allow default variable each level"
             )
 
-        xl1_u = [2] * q
+        xl1_u = [1] * q
         xl1_l = [0] * q
 
-        xl2_u = [2] * r
+        xl2_u = [1] * r
         xl2_l = [0] * r
 
         self.xl = anp.array(xl1_l + xl2_l)
@@ -1341,18 +1341,15 @@ class BLTP13_f(Problem):
         xl1 = x[:, np.arange((self.p + self.r), (self.p + self.r + self.q))]
         xl2 = x[:, np.arange((self.p + self.r + self.q), (self.p + self.r + self.q + self.r))]
 
-        f = -(-xu1- xu2 + 4 * xl1 - xl2)
-        out["F"] = f
+        f = -xu1[:, 0] - 2 * xu1[:, 1] - xl1[:, 0] - xl1[:, 1] - 2 * xl1[:, 2]
+        out["F"] = -f
 
         g = []
-        g1 = 2 * xu1 - xl1 + xl2 - 2.5
-        g1 = -g1
+        g1 = -xl1[:, 0] + xl1[:, 1] + xl1[:, 2] - 1
         g = np.append(g, g1)
-        g2 = -xu1 + 3 * xu2 - xl2 + 2
-        g2 = -g2
+        g2 = 2 * xu1[:, 0] - xl1[:, 0] + 2 * xl1[:, 1] - 0.5 * xl1[:, 2] - 1
         g = np.append(g, g2)
-        g3 = -xu1 - xu2 + 2
-        g3 = -g3
+        g3 = 2 * xu1[:, 1] + 2 * xl1[:, 0] - xl1[:, 1] - 0.5*xl1[:, 2] - 1
         g = np.append(g, g3)
 
         g = np.atleast_2d(g).reshape(-1, 3, order='F')
