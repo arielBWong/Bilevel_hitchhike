@@ -1564,6 +1564,12 @@ def main_bi_mo(seed_index, target_problem, enable_crossvalidation, method_select
         bu = np.min(complete_y_u)
         print('iteration %d, yu true evaluated/best so far: %.4f/%.4f ' % (i, new_complete_yu, bu))
 
+    # save data for later test
+    # EGO training data save
+    saveEGOtraining(complete_x_u, complete_y_u, folder, target_problem_u)
+    # EGO model save
+    saveKRGmodel(krg, krg_g, folder, target_problem_u, seed_index)
+
     # now upper iteration is finished
     # conduct a local search based on fl
     if target_problem_u.n_constr > 0:
@@ -1645,11 +1651,6 @@ def main_bi_mo(seed_index, target_problem, enable_crossvalidation, method_select
     save_converge_plot(converge_track, target_problem_u.name(), method_selection, seed_index, folder)
     save_function_evaluation(ll_nfev, target_problem_l, seed_index, method_selection, folder)
 
-    # save data for later test
-    # EGO training data save
-    saveEGOtraining(complete_x_u, complete_y_u, folder, target_problem_u)
-    # EGO model save
-    saveKRGmodel(krg, krg_g, folder, target_problem_u, seed_index)
     return None
 
 

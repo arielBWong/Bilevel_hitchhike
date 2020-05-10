@@ -311,12 +311,20 @@ def localsearch_on_surrogate(train_x_l, complete_y,  ankor_x, problem):
 
 def hybridsearch_on_trueEvaluation(ankor_x, level, other_x, true_problem):
 
-    para = {
-        "add_info": ankor_x,
-        "callback": bi_level_compensate_callback,
-        "level": level,
-        "other_x": other_x
-    }
+    if ankor_x is None:
+        para = {
+            "callback": bi_level_compensate_callback,
+            "level": level,
+            "other_x": other_x
+        }
+    else:
+        para = {
+            "add_info": ankor_x,
+            "callback": bi_level_compensate_callback,
+            "level": level,
+            "other_x": other_x
+        }
+
     bounds = np.vstack((true_problem.xl, true_problem.xu)).T.tolist()
     print('before EA search')
 
@@ -637,8 +645,114 @@ def saveKRGmodel(krg, krg_g, folder, problem_u, seed_index):
     krgmodel_save = result_folder + '\\krg_g_' + str(seed_index) + '.joblib'
     joblib.dump(krg_g, krgmodel_save)
 
+def ego_basic_train_predict(krg, train_x, train_y, test_x, test_y):
+    # this method is only made for the  method
+    # rebuild_surrogate_and_plot()
+    # only works for one krg
+
+    # find mean and std for prediction
+    train_x_norm, x_mean, x_std = norm_by_zscore(train_x)
+    train_y_norm, y_mean, y_std = norm_by_zscore(train_y)
+
+
+    test_x_norm = norm_by_exist_zscore(test_x, x_mean, x_std)
+    pred_y_norm, pred_y_sig_norm = krg.predict(test_x_norm)
+    pred_y = reverse_with_zscore(pred_y_norm, y_mean, y_std)
+
+    fig = plt.figure()
+    ax1 = fig.add_subplot(111)
+    ax1.set_xlabel('design variable')
+    ax1.set_ylabel('f and predicted f value')
+    ax1.plot(test_x, pred_y, 'b')
+    ax1.plot(test_x, test_y, 'r')
+    # ax1.fill_between(test_x.ravel(), (pred_y + pred_y_sig_norm).ravel(), (pred_y - pred_y_sig_norm).ravel(), alpha=0.5)
+    ax1.scatter(train_x, train_y, marker='x')
+
+def upper_y_from_exghaustive_search(problem_l, problem_u, xu_list):
+    # this function is only a service function for
+    # rebuild_surrogate_and_plot()
+    fu = []
+
+    n = xu_list.shape[0]
+    for i in range(n):
+        xu = np.atleast_2d(xu_list[i, :])
+        localsearch_xl, localsearch_fl, local_fev = \
+            hybridsearch_on_trueEvaluation(None, 'lower', xu, problem_l)
+
+        combo_x = np.hstack((xu, localsearch_xl))
+        fu_i = problem_u.evaluate(combo_x, return_values_of=["F"])
+        fu = np.append(fu, fu_i)
+
+
+    return fu
+
+
+
+
 def rebuild_surrogate_and_plot():
-    print('not yet need to re-run')
+
+    problems_json = 'p/bi_problems_test'
+    with open(problems_json, 'r') as data_file:
+        hyp = json.load(data_file)
+    target_problems = hyp['BO_target_problems']
+
+    n = len(target_problems)
+    seedlist = [2, 0, 5, 8, 1, 6, 5, 6, 5, 6, 9]
+    seed_index = 0
+
+    for i in range(0, n, 2):
+        problem_u = eval(target_problems[i])
+        problem_l = eval(target_problems[i+1])
+        seed = seedlist[seed_index]
+
+        # this plot only works with single upper level  variable problems
+        if problem_u.p > 1:
+            seed_index = seed_index + 1
+            continue
+
+        # load the krg and train sample of each problem
+        problem = problem_u.name()[0:-2]
+        working_folder = os.getcwd()
+        result_folder = working_folder + '\\' + folder + '\\' + problem + '_krgmodels'
+        krgmodel_save = result_folder + '\\krg_' + str(seed) + '.joblib'
+        krg = joblib.load(krgmodel_save)
+        seed_index = seed_index + 1
+
+        if len(krg) > 0:
+            print('can only process single objective, skip')
+            continue
+
+        testdata = np.linspace(problem_u.xl, problem_u.xu, 1000)
+        testdata_y = upper_y_from_exghaustive_search(problem_l, problem_u, testdata)
+
+        # use krg model to get predicted data
+        # load training data
+        result_folder = working_folder + '\\' + folder + '\\' + problem + '_sampleddata'
+        traindata_file = result_folder + '\\sampled_data_x.csv'
+        x_both = np.loadtxt(traindata_file, delimiter=',')
+        traindata_file = result_folder + '\\sampled_data_y.csv'
+        y_up = np.loadtxt(traindata_file, delimiter=',')
+
+        # put sample data on the plot
+        train_x = np.atleast_2d(x_both[:, 0:problem_u.p]).reshape(-1, problem_u.p)
+        train_y = np.atleast_2d(y_up).reshape(-1, 1)
+        ego_basic_train_predict(krg[0], train_x, train_y, testdata,testdata_y)
+
+        # resave the plot
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 def saveEGOtraining(complete_xu, complete_yu, folder, problem_u):
@@ -1104,6 +1218,7 @@ def test_if(a,b):
 
 if __name__ == "__main__":
 
+    rebuild_surrogate_and_plot()
 
     # problems_json = 'p/bi_problems'
     problems_json = 'p/bi_problems_test'
@@ -1168,11 +1283,8 @@ if __name__ == "__main__":
     print('best lower level constrait')
     print(gl_opt) 
     '''
-=======
-    print(gl_opt) 
-    '''
 
->>>>>>> 20aca43aa720dce7c0bb3581cd0edcc18c06d5c0
+
 
     '''
     from surrogate_problems import BLTP
