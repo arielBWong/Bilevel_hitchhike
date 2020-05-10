@@ -1470,7 +1470,7 @@ def main_bi_mo(seed_index, target_problem, enable_crossvalidation, method_select
 
     # delete invalid xl/xu/f/c: feasibility adjustment, if xl is infeasible, then that instance is deleted
     train_x_u, complete_x_u, complete_y_u, complete_c_u = \
-        feasibility_adjustment(train_x_u, complete_x_u, complete_y_u, complete_c_u, feasible_check)
+        feasibility_adjustment_2(train_x_u, complete_x_u, complete_y_u, complete_c_u, feasible_check)
     # adjustment of changes introduced by function feasibility_adjustment
     if target_problem_u.n_constr == 0:
         complete_c_u = None
@@ -1532,7 +1532,14 @@ def main_bi_mo(seed_index, target_problem, enable_crossvalidation, method_select
 
         # double check with feasibility returned from other level
         if feasible_flag is False:
-            print("found matching xl is not feasible, skip this new xu, xl adding step")
+            # print("found matching xl is not feasible, skip this new xu, xl adding step")
+            print("found matching xl is not feasible, set this new xu's value to 1e6")
+            # adding new xu yu to training
+            train_x_u = np.vstack((train_x_u, searched_xu))
+            complete_x_u = np.vstack((complete_x_u, new_complete_xu))
+            complete_y_u = np.vstack((complete_y_u, np.atleast_2d([1e6])))
+            if target_problem_u.n_constr > 0:
+                complete_c_u = np.vstack((complete_c_u, new_complete_cu))
 
         else:
             # adding new xu yu to training
@@ -1545,7 +1552,7 @@ def main_bi_mo(seed_index, target_problem, enable_crossvalidation, method_select
         if i > stop-number_of_initial_samples-1:
             break
         # if ll_nfev > 15000:
-           #  break
+           # break
 
         # if evaluation limit is not reached, search for next xu
         searched_xu, krg, krg_g = \
@@ -1710,10 +1717,10 @@ if __name__ == "__main__":
 
     para_run = True
     if para_run:
-        seed_max = 1
-        # args = paral_args_bi(target_problems, seed_max, False, methods_ops, alg_settings)
-        args = paral_args_temp(target_problems, seed_max, False, methods_ops, alg_settings)
-        num_workers = 11
+        seed_max = 11
+        args = paral_args_bi(target_problems, seed_max, False, methods_ops, alg_settings)
+        # args = paral_args_temp(target_problems, seed_max, False, methods_ops, alg_settings)
+        num_workers = 22
         pool = mp.Pool(processes=num_workers)
         pool.starmap(main_bi_mo, ([arg for arg in args]))
     else:
