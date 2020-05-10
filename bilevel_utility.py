@@ -326,12 +326,13 @@ def hybridsearch_on_trueEvaluation(ankor_x, level, other_x, true_problem):
         }
 
     bounds = np.vstack((true_problem.xl, true_problem.xu)).T.tolist()
-    print('before EA search')
+    # print('before EA search')
 
-    f, g = true_problem.evaluate(np.atleast_2d(np.hstack((other_x, ankor_x))), return_values_of=['F', 'G'])
-    print('fl value is: %.4f' % f)
-    print('cons value is ')
-    print(g)
+    if ankor_x is not None:
+        f, g = true_problem.evaluate(np.atleast_2d(np.hstack((other_x, ankor_x))), return_values_of=['F', 'G'])
+        print('fl value is: %.4f' % f)
+        print('cons value is ')
+        print(g)
 
     # call for global evaluation
     '''
@@ -367,11 +368,12 @@ def hybridsearch_on_trueEvaluation(ankor_x, level, other_x, true_problem):
 
     # check feasibility
     best_x = np.atleast_2d(best_x)
-    f, c = true_problem.evaluate(np.hstack((other_x, best_x)), return_values_of=['F', 'G'])
-    print('after EA true evaluation: ')
-    print('fl value is: %.4f' % f)
-    print('cons value is ')
-    print(c)
+
+    # f, c = true_problem.evaluate(np.hstack((other_x, best_x)), return_values_of=['F', 'G'])
+    # print('after EA true evaluation: ')
+    # print('fl value is: %.4f' % f)
+    # print('cons value is ')
+    # print(c)
     # if np.any(c > 0):
         # print('EA returns infeasible ')
     # else:
@@ -381,21 +383,20 @@ def hybridsearch_on_trueEvaluation(ankor_x, level, other_x, true_problem):
     nfev = nfev + 20*50
 
     best_x = np.atleast_2d(best_x)
+
     f, c = true_problem.evaluate(np.hstack((other_x, best_x)),  return_values_of=['F', 'G'])
-    print('after local search true evaluation: ')
-    print('fl value is: %.4f' % f)
-    print('cons value is ')
-    print(c)
-    # c[np.abs(c) < 1e-10] = 0
-    # if np.any(c > 0):
-        # print('local search returns infeasible ')
-    # else:
-        # print('local search returns feasible')
+    # print('after local search true evaluation: ')
+    # print('fl value is: %.4f' % f)
+    # print('cons value is ')
+    # print(c)
 
+    flag = True
+    if true_problem.n_constr > 0:
+        c[np.abs(c) < 1e-10] = 0
+        if np.any(c > 0):
+            flag = False
 
-
-
-    return best_x, best_f, nfev
+    return best_x, best_f, nfev, flag
 
 
 def localsearch_on_trueEvaluation(ankor_x, max_eval, level, other_x, true_problem):
@@ -645,7 +646,7 @@ def saveKRGmodel(krg, krg_g, folder, problem_u, seed_index):
     krgmodel_save = result_folder + '\\krg_g_' + str(seed_index) + '.joblib'
     joblib.dump(krg_g, krgmodel_save)
 
-def ego_basic_train_predict(krg, train_x, train_y, test_x, test_y):
+def ego_basic_train_predict(krg, train_x, train_y, test_x, test_y, problem_u, folder):
     # this method is only made for the  method
     # rebuild_surrogate_and_plot()
     # only works for one krg
@@ -659,14 +660,27 @@ def ego_basic_train_predict(krg, train_x, train_y, test_x, test_y):
     pred_y_norm, pred_y_sig_norm = krg.predict(test_x_norm)
     pred_y = reverse_with_zscore(pred_y_norm, y_mean, y_std)
 
+    plt.ion()
     fig = plt.figure()
     ax1 = fig.add_subplot(111)
     ax1.set_xlabel('design variable')
     ax1.set_ylabel('f and predicted f value')
-    ax1.plot(test_x, pred_y, 'b')
-    ax1.plot(test_x, test_y, 'r')
+    ax1.scatter(test_x.ravel(), pred_y.ravel(), c='b')
+    ax1.scatter(test_x.ravel(), test_y, c='r')
     # ax1.fill_between(test_x.ravel(), (pred_y + pred_y_sig_norm).ravel(), (pred_y - pred_y_sig_norm).ravel(), alpha=0.5)
     ax1.scatter(train_x, train_y, marker='x')
+    ax1.legend(['EGO kriging', 'exghaustive search', 'training'])
+    plt.title(problem_u.name()[0:-2])
+
+    # save back to where krg model was saved
+    problem = problem_u.name()[0:-2]
+    working_folder = os.getcwd()
+    result_folder = working_folder + '\\' + folder + '\\' + problem + '_krgmodels'
+    plotsave = result_folder + '\\upper.png'
+    plt.savefig(plotsave, format='png')
+
+    plt.show()
+    plt.ioff()
 
 def upper_y_from_exghaustive_search(problem_l, problem_u, xu_list):
     # this function is only a service function for
@@ -676,11 +690,14 @@ def upper_y_from_exghaustive_search(problem_l, problem_u, xu_list):
     n = xu_list.shape[0]
     for i in range(n):
         xu = np.atleast_2d(xu_list[i, :])
-        localsearch_xl, localsearch_fl, local_fev = \
+        localsearch_xl, localsearch_fl, local_fev, flag = \
             hybridsearch_on_trueEvaluation(None, 'lower', xu, problem_l)
 
         combo_x = np.hstack((xu, localsearch_xl))
         fu_i = problem_u.evaluate(combo_x, return_values_of=["F"])
+
+        if flag is False:
+            fu_i = 100
         fu = np.append(fu, fu_i)
 
 
@@ -695,18 +712,20 @@ def rebuild_surrogate_and_plot():
     with open(problems_json, 'r') as data_file:
         hyp = json.load(data_file)
     target_problems = hyp['BO_target_problems']
-
+    folder ='bi_output'
     n = len(target_problems)
     seedlist = [2, 0, 5, 8, 1, 6, 5, 6, 5, 6, 9]
     seed_index = 0
 
-    for i in range(0, n, 2):
+    # for i in range(0, n, 2):
+    for i in range(6, 8, 2):  # only test problem 4
         problem_u = eval(target_problems[i])
         problem_l = eval(target_problems[i+1])
+        seed_index = 3  # only for test problem 4
         seed = seedlist[seed_index]
 
         # this plot only works with single upper level  variable problems
-        if problem_u.p > 1:
+        if problem_u.n_levelvar > 1:
             seed_index = seed_index + 1
             continue
 
@@ -718,7 +737,7 @@ def rebuild_surrogate_and_plot():
         krg = joblib.load(krgmodel_save)
         seed_index = seed_index + 1
 
-        if len(krg) > 0:
+        if len(krg) > 1:
             print('can only process single objective, skip')
             continue
 
@@ -734,9 +753,9 @@ def rebuild_surrogate_and_plot():
         y_up = np.loadtxt(traindata_file, delimiter=',')
 
         # put sample data on the plot
-        train_x = np.atleast_2d(x_both[:, 0:problem_u.p]).reshape(-1, problem_u.p)
+        train_x = np.atleast_2d(x_both[:, 0:problem_u.n_levelvar]).reshape(-1, problem_u.p)
         train_y = np.atleast_2d(y_up).reshape(-1, 1)
-        ego_basic_train_predict(krg[0], train_x, train_y, testdata,testdata_y)
+        ego_basic_train_predict(krg[0], train_x, train_y, testdata,testdata_y, problem_u, folder)
 
         # resave the plot
 
@@ -1165,10 +1184,6 @@ def visualization_smd3(problem, seed_index):
     ax.set_title('1000 points in xl boundaries')
 
 
-
-
-
-
     train_y[train_y < 3] = 0
     train_y_vio = train_y.sum(axis=1)
     throwaway = np.nonzero(train_y_vio)
@@ -1231,9 +1246,9 @@ if __name__ == "__main__":
 
     # in general post process
     # ------------ result process--------------
-    problems = target_problems
-    folder = hyp['alg_settings']['folder']
-    results_process_bestf(problems, 'eim', 11, folder)
+    # problems = target_problems
+    # folder = hyp['alg_settings']['folder']
+    # results_process_bestf(problems, 'eim', 11, folder)
     # combine_fev(problems, 'eim', 11)
     # results_process_before_after(problems, 'eim', 'bi_output', 'accuracy', 29)
     # --------------result process ------------
