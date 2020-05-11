@@ -26,7 +26,8 @@ from bilevel_utility import surrogate_search_for_nextx, save_converge_plot,\
     save_accuracy, search_for_matching_otherlevel_x,\
     save_before_reevaluation, save_function_evaluation, return_feasible,\
     hybridsearch_on_trueEvaluation, nofeasible_select, feasibility_adjustment_2,\
-    save_feasibility,  feasibility_adjustment, saveEGOtraining, saveKRGmodel
+    save_feasibility,  feasibility_adjustment, saveEGOtraining, saveKRGmodel,\
+    feasibility_adjustment_3_dynamic
 
 
 def return_current_extreme(train_x, train_y):
@@ -1468,10 +1469,13 @@ def main_bi_mo(seed_index, target_problem, enable_crossvalidation, method_select
         complete_y_u = target_problem_u.evaluate(complete_x_u, return_values_of=["F"])
         complete_c_u = None
 
-    # delete invalid xl/xu/f/c: feasibility adjustment, if xl is infeasible, then that instance is deleted
+    # infeasibility process 1: delete 2: set high value 3: dynamically high value
+    # train_x_u, complete_x_u, complete_y_u, complete_c_u = \
+        # feasibility_adjustment_2(train_x_u, complete_x_u, complete_y_u, complete_c_u, feasible_check)
     train_x_u, complete_x_u, complete_y_u, complete_c_u = \
-        feasibility_adjustment_2(train_x_u, complete_x_u, complete_y_u, complete_c_u, feasible_check)
-    # adjustment of changes introduced by function feasibility_adjustment
+        feasibility_adjustment_3_dynamic(train_x_u, complete_x_u, complete_y_u, complete_c_u, feasible_check)
+
+    # sad adjustment of changes introduced by function feasibility_adjustment
     if target_problem_u.n_constr == 0:
         complete_c_u = None
 
@@ -1531,23 +1535,21 @@ def main_bi_mo(seed_index, target_problem, enable_crossvalidation, method_select
         # test_all = np.hstack((new_complete_xu, new_complete_yu))
 
         # double check with feasibility returned from other level
-        if feasible_flag is False:
-            # print("found matching xl is not feasible, skip this new xu, xl adding step")
-            print("found matching xl is not feasible, set this new xu's value to 1e6")
-            # adding new xu yu to training
-            train_x_u = np.vstack((train_x_u, searched_xu))
-            complete_x_u = np.vstack((complete_x_u, new_complete_xu))
-            complete_y_u = np.vstack((complete_y_u, np.atleast_2d([1e6])))
-            if target_problem_u.n_constr > 0:
-                complete_c_u = np.vstack((complete_c_u, new_complete_cu))
+        feasible_check = np.append(feasible_check, feasible_flag)
+        # adding new xu yu to training
+        train_x_u = np.vstack((train_x_u, searched_xu))
+        complete_x_u = np.vstack((complete_x_u, new_complete_xu))
+        complete_y_u = np.vstack((complete_y_u, new_complete_yu))
+        if target_problem_u.n_constr > 0:
+            complete_c_u = np.vstack((complete_c_u, new_complete_cu))
+        # after adding new sample
+        # follow an adjust on feasibility
+        train_x_u, complete_x_u, complete_y_u, complete_c_u = \
+            feasibility_adjustment_3_dynamic(train_x_u, complete_x_u, complete_y_u, complete_c_u, feasible_check)
 
-        else:
-            # adding new xu yu to training
-            train_x_u = np.vstack((train_x_u, searched_xu))
-            complete_x_u = np.vstack((complete_x_u, new_complete_xu))
-            complete_y_u = np.vstack((complete_y_u, new_complete_yu))
-            if target_problem_u.n_constr > 0:
-               complete_c_u = np.vstack((complete_c_u, new_complete_cu))
+        # sad adjustment of changes introduced by function feasibility_adjustment
+        if target_problem_u.n_constr == 0:
+            complete_c_u = None
 
         if i > stop-number_of_initial_samples-1:
             break

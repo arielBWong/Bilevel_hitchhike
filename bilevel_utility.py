@@ -108,6 +108,25 @@ def feasibility_adjustment_2(part_x, combine_x, combine_y, combine_c, feasibilit
     return part_x, combine_x, combine_y, combine_c
 
 
+# infeasible values are set 1.1 max f dynamically
+# only for single objective
+def feasibility_adjustment_3_dynamic(part_x, combine_x, combine_y, combine_c, feasibility):
+    feasibility = np.array(feasibility)
+
+    infeasible_index = np.argwhere(feasibility == False)
+    feasible_index = np.argwhere(feasibility == True)
+
+    infeasible_index = infeasible_index.ravel()
+    feasible_index = feasible_index.ravel()
+
+    max_y = np.max(combine_y[feasible_index, :]) * 1.2
+
+    # use current max feasible f value as infeasible punishment value
+    combine_y[infeasible_index, :] = max_y
+
+    return part_x, combine_x, combine_y, combine_c
+
+
 def search_for_matching_otherlevel_x(x_other, search_iter, n_samples, problem, level, eim, eim_pop, eim_gen,  seed_index, enable_crossvalidation, method_selection, **kwargs):
     train_x, train_y, cons_y = init_xy(n_samples, problem, seed_index,
                                              **{'problem_type': 'bilevel'})
