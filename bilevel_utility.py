@@ -646,7 +646,7 @@ def saveKRGmodel(krg, krg_g, folder, problem_u, seed_index):
     krgmodel_save = result_folder + '\\krg_g_' + str(seed_index) + '.joblib'
     joblib.dump(krg_g, krgmodel_save)
 
-def ego_basic_train_predict(krg, train_x, train_y, test_x, test_y, problem_u, folder):
+def ego_basic_train_predict(krg, krg_g, train_x, train_y, train_c, test_x, test_y, problem_u, folder):
     # this method is only made for the  method
     # rebuild_surrogate_and_plot()
     # only works for one krg
@@ -660,16 +660,51 @@ def ego_basic_train_predict(krg, train_x, train_y, test_x, test_y, problem_u, fo
     pred_y_norm, pred_y_sig_norm = krg.predict(test_x_norm)
     pred_y = reverse_with_zscore(pred_y_norm, y_mean, y_std)
 
+    if train_c is not None:
+        train_c_norm, c_mean, c_std = norm_by_zscore(train_c)
+        train_c_norm = np.atleast_2d(train_c_norm)
+
+        n_g = len(krg_g)
+        pred_c = []
+        for j in range(n_g):
+            cons_norm = krg_g[j].predict(test_x_norm)
+            cons = reverse_with_zscore(cons_norm, c_mean, c_std)
+            pred_c = np.append(pred_c, cons)
+
+        pred_c = np.atleast_2d(pred_c).reshape(-1, n_g, order='F')
+
+        # now use pred_c to adjust feasibility of pred_y
+        infeas_pair = []
+        n_x = train_x.shape[0]
+        for j in range(n_x):
+            cons_y = np.atleast_2d(pred_c[j, :]).reshape(1, -1)  # check feasibility one by one
+            cons_y[np.abs(cons_y) < 1e-10] = 0
+            if np.any(cons_y) > 0:   # mark infeasible
+                pair = [test_x[j, 0], pred_y[j, 0]]   # x has to be one variable, y
+                infeas_pair = np.append(infeas_pair, pair)
+            else:
+                continue
+        infeas_pair = np.atleast_2d(infeas_pair).reshape(-1, 2)
+    else:
+        train_c_norm = None
+
     plt.ion()
     fig = plt.figure()
     ax1 = fig.add_subplot(111)
     ax1.set_xlabel('design variable')
     ax1.set_ylabel('f and predicted f value')
-    ax1.scatter(test_x.ravel(), pred_y.ravel(), c='b')
+    ax1.scatter(test_x.ravel(), pred_y.ravel(), c='g')
     ax1.scatter(test_x.ravel(), test_y, c='r')
     # ax1.fill_between(test_x.ravel(), (pred_y + pred_y_sig_norm).ravel(), (pred_y - pred_y_sig_norm).ravel(), alpha=0.5)
     ax1.scatter(train_x, train_y, marker='x')
-    ax1.legend(['EGO kriging', 'exghaustive search', 'training'])
+
+    if train_c is not None:
+        infeas_x = infeas_pair[:, 0]
+        infeas_y = infeas_pair[:, 1]
+        ax1.scatter(infeas_x, infeas_y, r='b')
+        ax1.legend(['EGO kriging', 'exghaustive search', 'training', 'infeasible'])
+    else:
+        ax1.legend(['EGO kriging', 'exghaustive search', 'training'])
     plt.title(problem_u.name()[0:-2])
 
     # save back to where krg model was saved
@@ -735,12 +770,17 @@ def rebuild_surrogate_and_plot():
         result_folder = working_folder + '\\' + folder + '\\' + problem + '_krgmodels'
         krgmodel_save = result_folder + '\\krg_' + str(seed) + '.joblib'
         krg = joblib.load(krgmodel_save)
+        krgmodel_save = result_folder + '\\krg_g_' + str(seed) + '.joblib'
+        krg_g = joblib.load(krgmodel_save)
+
+
         seed_index = seed_index + 1
 
         if len(krg) > 1:
             print('can only process single objective, skip')
             continue
 
+        # create test data from variable bounds
         testdata = np.linspace(problem_u.xl, problem_u.xu, 1000)
         testdata_y = upper_y_from_exghaustive_search(problem_l, problem_u, testdata)
 
@@ -752,10 +792,15 @@ def rebuild_surrogate_and_plot():
         traindata_file = result_folder + '\\sampled_data_y.csv'
         y_up = np.loadtxt(traindata_file, delimiter=',')
 
-        # put sample data on the plot
+        # extract upper level variable
         train_x = np.atleast_2d(x_both[:, 0:problem_u.n_levelvar]).reshape(-1, problem_u.p)
         train_y = np.atleast_2d(y_up).reshape(-1, 1)
-        ego_basic_train_predict(krg[0], train_x, train_y, testdata,testdata_y, problem_u, folder)
+
+        # train_c is not saved but can be rebuilt
+        train_c = problem_u.evaluate(train_x, return_values_of=['G'])
+
+
+        ego_basic_train_predict(krg[0], krg_g, train_x, train_y, train_c, testdata,testdata_y, problem_u, folder)
 
         # resave the plot
 

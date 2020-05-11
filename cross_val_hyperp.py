@@ -275,7 +275,6 @@ def model_building(train_x, train_y, cons_y):
     else:
         n_sur_cons = 0
 
-
     gpr = []
     for i in range(n_sur_objs):
         one_obj_y = np.atleast_2d(train_y[:, i]).reshape(-1, 1)
