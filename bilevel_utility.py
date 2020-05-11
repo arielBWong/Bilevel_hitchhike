@@ -451,7 +451,7 @@ def localsearch_on_trueEvaluation(ankor_x, max_eval, level, other_x, true_proble
             obj_func, ankor_x, method="SLSQP", options={'maxiter': max_eval}, jac=False,
             bounds=bounds)
 
-    print('number of function evaluations: %d '% optimization_res.nfev)
+    # print('number of function evaluations: %d '% optimization_res.nfev)
 
     x, f, num_fev = optimization_res.x, optimization_res.fun, optimization_res.nfev
     return x, f, num_fev
@@ -679,6 +679,7 @@ def ego_basic_train_predict(krg, krg_g, train_x, train_y, train_c, test_x, test_
     pred_y_norm, pred_y_sig_norm = krg.predict(test_x_norm)
     pred_y = reverse_with_zscore(pred_y_norm, y_mean, y_std)
 
+
     if train_c is not None:
         train_c_norm, c_mean, c_std = norm_by_zscore(train_c)
         train_c_norm = np.atleast_2d(train_c_norm)
@@ -707,23 +708,26 @@ def ego_basic_train_predict(krg, krg_g, train_x, train_y, train_c, test_x, test_
     else:
         train_c_norm = None
 
+
     plt.ion()
     fig = plt.figure()
     ax1 = fig.add_subplot(111)
     ax1.set_xlabel('design variable')
     ax1.set_ylabel('f and predicted f value')
-    ax1.scatter(test_x.ravel(), pred_y.ravel(), c='g')
+    ax1.scatter(test_x.ravel(), pred_y.ravel(), marker='|', c='g')
     ax1.scatter(test_x.ravel(), test_y, c='r')
     # ax1.fill_between(test_x.ravel(), (pred_y + pred_y_sig_norm).ravel(), (pred_y - pred_y_sig_norm).ravel(), alpha=0.5)
     ax1.scatter(train_x, train_y, marker='x')
 
+
     if train_c is not None:
         infeas_x = infeas_pair[:, 0]
         infeas_y = infeas_pair[:, 1]
-        ax1.scatter(infeas_x, infeas_y, r='b')
+        ax1.scatter(infeas_x, infeas_y, c='k')
         ax1.legend(['EGO kriging', 'exghaustive search', 'training', 'infeasible'])
     else:
         ax1.legend(['EGO kriging', 'exghaustive search', 'training'])
+
     plt.title(problem_u.name()[0:-2])
 
     # save back to where krg model was saved
@@ -736,7 +740,7 @@ def ego_basic_train_predict(krg, krg_g, train_x, train_y, train_c, test_x, test_
     plt.show()
     plt.ioff()
 
-def upper_y_from_exghaustive_search(problem_l, problem_u, xu_list):
+def upper_y_from_exghaustive_search(problem_l, problem_u, xu_list,vio_value):
     # this function is only a service function for
     # rebuild_surrogate_and_plot()
     fu = []
@@ -751,7 +755,8 @@ def upper_y_from_exghaustive_search(problem_l, problem_u, xu_list):
         fu_i = problem_u.evaluate(combo_x, return_values_of=["F"])
 
         if flag is False:
-            fu_i = 100
+            fu_i = vio_value
+            print('False lower')
         fu = np.append(fu, fu_i)
 
 
@@ -766,9 +771,10 @@ def rebuild_surrogate_and_plot():
     with open(problems_json, 'r') as data_file:
         hyp = json.load(data_file)
     target_problems = hyp['BO_target_problems']
-    folder ='bi_output'
+    folder ='bi_output_rebuiltupperlevel'
     n = len(target_problems)
     seedlist = [2, 0, 5, 8, 1, 6, 5, 6, 5, 6, 9]
+
     seed_index = 0
 
     # for i in range(0, n, 2):
@@ -777,6 +783,7 @@ def rebuild_surrogate_and_plot():
         problem_l = eval(target_problems[i+1])
         seed_index = 3  # only for test problem 4
         seed = seedlist[seed_index]
+        print(problem_u.name())
 
         # this plot only works with single upper level  variable problems
         if problem_u.n_levelvar > 1:
@@ -799,9 +806,6 @@ def rebuild_surrogate_and_plot():
             print('can only process single objective, skip')
             continue
 
-        # create test data from variable bounds
-        testdata = np.linspace(problem_u.xl, problem_u.xu, 1000)
-        testdata_y = upper_y_from_exghaustive_search(problem_l, problem_u, testdata)
 
         # use krg model to get predicted data
         # load training data
@@ -816,8 +820,17 @@ def rebuild_surrogate_and_plot():
         train_y = np.atleast_2d(y_up).reshape(-1, 1)
 
         # train_c is not saved but can be rebuilt
-        train_c = problem_u.evaluate(train_x, return_values_of=['G'])
+        train_c = problem_u.evaluate(np.atleast_2d(x_both), return_values_of=['G'])
 
+        # identify the violation value is set to what
+        feasiflag_save = result_folder + '\\sampled_ll_feasi_' + str(seed) + '.joblib'
+        feasible_flag = joblib.load(feasiflag_save)
+        vio_list = np.argwhere(feasible_flag == False)
+        vio_setting = train_y[vio_list[0], :]
+
+        # create test data from variable bounds
+        testdata = np.linspace(problem_u.xl, problem_u.xu, 1000)
+        testdata_y = upper_y_from_exghaustive_search(problem_l, problem_u, testdata, vio_setting)
 
         ego_basic_train_predict(krg[0], krg_g, train_x, train_y, train_c, testdata,testdata_y, problem_u, folder)
 
