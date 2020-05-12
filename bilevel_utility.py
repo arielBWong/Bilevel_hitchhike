@@ -791,8 +791,8 @@ def rebuild_surrogate_and_plot():
     target_problems = hyp['BO_target_problems']
     folder ='bi_output_rebuiltupperlevel'
     n = len(target_problems)
-    seedlist = [2, 0, 5, 8, 1, 6, 5, 6, 5, 6, 9]
-
+    # seedlist = [2, 0, 5, 8, 1, 6, 5, 6, 5, 6, 9]
+    seedlist = [2, 0, 5, 1, 8, 6, 5, 6, 4, 1, 9]
     seed_index = 0
 
     for i in range(0, n, 2):
