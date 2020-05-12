@@ -773,8 +773,9 @@ def upper_y_from_exghaustive_search(problem_l, problem_u, xu_list,vio_value):
         fu_i = problem_u.evaluate(combo_x, return_values_of=["F"])
 
         if flag is False:
-            fu_i = vio_value
-            print('False lower')
+            if vio_value is not None:
+                fu_i = vio_value
+            # print('False lower')
         fu = np.append(fu, fu_i)
 
 
@@ -789,7 +790,7 @@ def rebuild_surrogate_and_plot():
     with open(problems_json, 'r') as data_file:
         hyp = json.load(data_file)
     target_problems = hyp['BO_target_problems']
-    folder ='bi_output_rebuiltupperlevel'
+    folder ='bi_output'
     n = len(target_problems)
     # seedlist = [2, 0, 5, 8, 1, 6, 5, 6, 5, 6, 9]
     seedlist = [2, 0, 5, 1, 8, 6, 5, 6, 4, 1, 9]
@@ -842,18 +843,23 @@ def rebuild_surrogate_and_plot():
         # as it cannot be counted into training, otherwise, the mean for
         # building prediction will be affected.
         m = train_x.shape[0]
-        train_x = np.delete(train_x, m-1, axis=1)
-        train_y = np.delete(train_y, m - 1, axis=1)
+        train_x = np.delete(train_x, m-1, axis=0)
+        train_y = np.delete(train_y, m - 1, axis=0)
 
         # train_c is not saved but can be rebuilt
         train_c = problem_u.evaluate(np.atleast_2d(x_both), return_values_of=['G'])
-        train_c = np.delete(train_c, m-1, axis=1)
+        if train_c is not None:
+            train_c = np.delete(train_c, m-1, axis=0)
 
         # identify the violation value is set to what
         feasiflag_save = result_folder + '\\sampled_ll_feasi_' + str(seed) + '.joblib'
         feasible_flag = joblib.load(feasiflag_save)
+        feasible_flag = feasible_flag[0:-1]
         vio_list = np.argwhere(feasible_flag == False)
-        vio_setting = train_y[vio_list[0], :]
+        if len(vio_list)>0:
+            vio_setting = train_y[vio_list[0], :]
+        else:
+            vio_setting = None
 
         # create test data from variable bounds
         testdata = np.linspace(problem_u.xl, problem_u.xu, 1000)
