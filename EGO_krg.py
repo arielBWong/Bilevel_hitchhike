@@ -27,7 +27,7 @@ from bilevel_utility import surrogate_search_for_nextx, save_converge_plot,\
     save_before_reevaluation, save_function_evaluation, return_feasible,\
     hybridsearch_on_trueEvaluation, nofeasible_select, feasibility_adjustment_2,\
     save_feasibility,  feasibility_adjustment, saveEGOtraining, saveKRGmodel,\
-    feasibility_adjustment_3_dynamic
+    feasibility_adjustment_3_dynamic, trained_model_prediction
 
 
 def return_current_extreme(train_x, train_y):
@@ -1536,6 +1536,7 @@ def main_bi_mo(seed_index, target_problem, enable_crossvalidation, method_select
 
         # double check with feasibility returned from other level
         feasible_check = np.append(feasible_check, feasible_flag)
+
         # adding new xu yu to training
         train_x_u = np.vstack((train_x_u, searched_xu))
         complete_x_u = np.vstack((complete_x_u, new_complete_xu))
@@ -1570,12 +1571,20 @@ def main_bi_mo(seed_index, target_problem, enable_crossvalidation, method_select
 
         # record convergence
         converge_track.append(np.min(complete_y_u))
+        # if i ==9:
+            # a = 0
         bu = np.min(complete_y_u)
         print('iteration %d, yu true evaluated/best so far: %.4f/%.4f ' % (i, new_complete_yu, bu))
 
     # save data for later test
     # EGO training data save
     saveEGOtraining(complete_x_u, complete_y_u, folder, target_problem_u)
+
+    print(complete_y_u)
+    print('predicted training')
+    out = trained_model_prediction(krg[0], train_x_u, complete_y_u, train_x_u)
+    print(out)
+
     # EGO model save
     saveKRGmodel(krg, krg_g, folder, target_problem_u, seed_index)
 
@@ -1717,7 +1726,7 @@ if __name__ == "__main__":
     alg_settings = hyp['alg_settings']
 
 
-    para_run = True
+    para_run = False
     if para_run:
         seed_max = 11
         args = paral_args_bi(target_problems, seed_max, False, methods_ops, alg_settings)
@@ -1726,8 +1735,8 @@ if __name__ == "__main__":
         pool = mp.Pool(processes=num_workers)
         pool.starmap(main_bi_mo, ([arg for arg in args]))
     else:
-        i = 0
-        main_bi_mo(0, target_problems[i:i+2], False, 'eim', alg_settings)
+        i = 4
+        main_bi_mo(5, target_problems[i:i+2], False, 'eim', alg_settings)
 
 
 

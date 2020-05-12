@@ -665,10 +665,28 @@ def saveKRGmodel(krg, krg_g, folder, problem_u, seed_index):
     krgmodel_save = result_folder + '\\krg_g_' + str(seed_index) + '.joblib'
     joblib.dump(krg_g, krgmodel_save)
 
+def trained_model_prediction(krg, train_x, train_y, test_x):
+    print('should make this re-usable')
+
+    # find mean and std for prediction
+    train_x_norm, x_mean, x_std = norm_by_zscore(train_x)
+    train_y_norm, y_mean, y_std = norm_by_zscore(train_y)
+
+    test_x_norm = norm_by_exist_zscore(test_x, x_mean, x_std)
+    pred_y_norm, pred_y_sig_norm = krg.predict(test_x_norm)
+    pred_y = reverse_with_zscore(pred_y_norm, y_mean, y_std)
+
+    return pred_y
+
+
+
+
+
 def ego_basic_train_predict(krg, krg_g, train_x, train_y, train_c, test_x, test_y, problem_u, folder):
     # this method is only made for the  method
     # rebuild_surrogate_and_plot()
     # only works for one krg
+
 
     # find mean and std for prediction
     train_x_norm, x_mean, x_std = norm_by_zscore(train_x)
@@ -777,11 +795,11 @@ def rebuild_surrogate_and_plot():
 
     seed_index = 0
 
-    # for i in range(0, n, 2):
-    for i in range(6, 8, 2):  # only test problem 4
+    for i in range(0, n, 2):
+    # for i in range(6, 8, 2):  # only test problem 4
         problem_u = eval(target_problems[i])
         problem_l = eval(target_problems[i+1])
-        seed_index = 3  # only for test problem 4
+        # seed_index = 3  # only for test problem 4
         seed = seedlist[seed_index]
         print(problem_u.name())
 
@@ -819,8 +837,17 @@ def rebuild_surrogate_and_plot():
         train_x = np.atleast_2d(x_both[:, 0:problem_u.n_levelvar]).reshape(-1, problem_u.p)
         train_y = np.atleast_2d(y_up).reshape(-1, 1)
 
+
+        # because of saving sequence problem, the last one needs to be deleted
+        # as it cannot be counted into training, otherwise, the mean for
+        # building prediction will be affected.
+        m = train_x.shape[0]
+        train_x = np.delete(train_x, m-1, axis=1)
+        train_y = np.delete(train_y, m - 1, axis=1)
+
         # train_c is not saved but can be rebuilt
         train_c = problem_u.evaluate(np.atleast_2d(x_both), return_values_of=['G'])
+        train_c = np.delete(train_c, m-1, axis=1)
 
         # identify the violation value is set to what
         feasiflag_save = result_folder + '\\sampled_ll_feasi_' + str(seed) + '.joblib'
