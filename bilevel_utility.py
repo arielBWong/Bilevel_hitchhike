@@ -781,22 +781,34 @@ def upper_y_from_exghaustive_search(problem_l, problem_u, xu_list,vio_value):
 
     return fu
 
-def plot_sample_order(train_x, train_y):
+def plot_sample_order(train_x, train_y, problem_u, seed):
     # this function plots the value of x to y in the order of samples
     # train_x and train_y is assumed np.2d
     # this function only process train_x as one variable vector
     # same for train_y
-
+    problem = problem_u.name()[0:-2]
     n = train_x.shape[0]
     color_order = np.linspace(0, n, n)
 
 
     fig = plt.figure()
+    cm1 = plt.cm.get_cmap('RdYlBu')
     ax1 = fig.add_subplot(111)
     ax1.set_xlabel('design variable')
     ax1.set_ylabel('f and predicted f value')
-    ax1.scatter(train_x.ravel(), train_y.ravel(), c=color_order)
-    plot.show()
+    sc1 = ax1.scatter(train_x.ravel(), train_y.ravel(), c=color_order, cmap=cm1)
+    fig.colorbar(sc1, ax=ax1)
+    plt.title(problem + ' ' + str(n) + ' samples')
+
+    working_folder = os.getcwd()
+    result_folder = working_folder + '\\order_of_samples'
+    if not os.path.isdir(result_folder):
+        os.mkdir(result_folder)
+
+    plotsave = result_folder + '\\' + problem + '_sample_order_plot_' + str(seed) + '.png'
+    plt.savefig(plotsave, format='png')
+
+    # plt.show()
 
 
 
@@ -809,15 +821,15 @@ def rebuild_surrogate_and_plot():
     target_problems = hyp['BO_target_problems']
     folder ='bi_output'
     n = len(target_problems)
-    # seedlist = [2, 0, 5, 8, 1, 6, 5, 6, 5, 6, 9]
-    seedlist = [2, 0, 5, 1, 8, 6, 5, 6, 4, 1, 9]
+    # seedlist = [2, 0, 5, 8, 1, 6, 5, 6, 5, 6, 9]   # median seeds from no sample in infeasible regions
+    seedlist = [2, 0, 5, 1, 8, 6, 5, 6, 4, 1, 9]    # median seeds from dynamic values from infeasible regions
     seed_index = 0
 
-    # for i in range(0, n, 2):
-    for i in range(8, 10, 2):  # only test problem 5
+    for i in range(0, n, 2):
+    # for i in range(8, 10, 2):  # only test problem 5
         problem_u = eval(target_problems[i])
         problem_l = eval(target_problems[i+1])
-        seed_index = 4  # only for test problem 5
+        # seed_index = 4  # only for test problem 5
         seed = seedlist[seed_index]
         print(problem_u.name())
 
@@ -859,9 +871,9 @@ def rebuild_surrogate_and_plot():
         train_x = np.atleast_2d(x_both[:, 0:problem_u.n_levelvar]).reshape(-1, problem_u.p)
         train_y = np.atleast_2d(y_up).reshape(-1, 1)
 
-        plot_sample_order(train_x, train_y)
+        plot_sample_order(train_x, train_y, problem_u, seed)
 
-
+        '''
         # because of saving sequence problem, the last one needs to be deleted
         # as it cannot be counted into training, otherwise, the mean for
         # building prediction will be affected.
@@ -893,6 +905,7 @@ def rebuild_surrogate_and_plot():
 
 
         ego_basic_train_predict(krg[0], krg_g, train_x, train_y, train_c, testdata,testdata_y, problem_u, folder)
+        '''
 
         # resave the plot
 
