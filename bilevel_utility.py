@@ -892,17 +892,17 @@ def rebuild_surrogate_and_plot():
 
 
 
-def saveEGOtraining(complete_xu, complete_yu, folder, problem_u):
+def saveEGOtraining(complete_xu, complete_yu, folder, problem_u, seed):
 
     problem = problem_u.name()[0:-2]
     working_folder = os.getcwd()
     result_folder = working_folder + '\\' + folder + '\\' + problem + '_sampleddata'
     if not os.path.isdir(result_folder):
         os.mkdir(result_folder)
-    egodata_save = result_folder + '\\sampled_data_x.csv'
+    egodata_save = result_folder + '\\sampled_data_x_'+str(seed)+'.csv'
     np.savetxt(egodata_save, complete_xu, delimiter=',')
 
-    egodata_save = result_folder + '\\sampled_data_y.csv'
+    egodata_save = result_folder + '\\sampled_data_y_'+str(seed)+'.csv'
     np.savetxt(egodata_save, complete_yu, delimiter=',')
 
 def EGO_rebuildplot(problem_u, folder):

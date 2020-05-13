@@ -1578,7 +1578,7 @@ def main_bi_mo(seed_index, target_problem, enable_crossvalidation, method_select
 
     # save data for later test
     # EGO training data save
-    saveEGOtraining(complete_x_u, complete_y_u, folder, target_problem_u)
+    saveEGOtraining(complete_x_u, complete_y_u, folder, target_problem_u, seed_index)
 
     print(complete_y_u)
     print('predicted training')
