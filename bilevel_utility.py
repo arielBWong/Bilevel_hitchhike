@@ -755,7 +755,7 @@ def ego_basic_train_predict(krg, krg_g, train_x, train_y, train_c, test_x, test_
     plotsave = result_folder + '\\upper.png'
     plt.savefig(plotsave, format='png')
 
-    plt.show()
+    # plt.show()
     plt.ioff()
 
 def upper_y_from_exghaustive_search(problem_l, problem_u, xu_list,vio_value):
@@ -781,6 +781,23 @@ def upper_y_from_exghaustive_search(problem_l, problem_u, xu_list,vio_value):
 
     return fu
 
+def plot_sample_order(train_x, train_y):
+    # this function plots the value of x to y in the order of samples
+    # train_x and train_y is assumed np.2d
+    # this function only process train_x as one variable vector
+    # same for train_y
+
+    n = train_x.shape[0]
+    color_order = np.linspace(0, n, n)
+
+
+    fig = plt.figure()
+    ax1 = fig.add_subplot(111)
+    ax1.set_xlabel('design variable')
+    ax1.set_ylabel('f and predicted f value')
+    ax1.scatter(train_x.ravel(), train_y.ravel(), c=color_order)
+    plot.show()
+
 
 
 
@@ -796,11 +813,11 @@ def rebuild_surrogate_and_plot():
     seedlist = [2, 0, 5, 1, 8, 6, 5, 6, 4, 1, 9]
     seed_index = 0
 
-    for i in range(0, n, 2):
-    # for i in range(8, 10, 2):  # only test problem 5
+    # for i in range(0, n, 2):
+    for i in range(8, 10, 2):  # only test problem 5
         problem_u = eval(target_problems[i])
         problem_l = eval(target_problems[i+1])
-        # seed_index = 4  # only for test problem 5
+        seed_index = 4  # only for test problem 5
         seed = seedlist[seed_index]
         print(problem_u.name())
 
@@ -842,6 +859,8 @@ def rebuild_surrogate_and_plot():
         train_x = np.atleast_2d(x_both[:, 0:problem_u.n_levelvar]).reshape(-1, problem_u.p)
         train_y = np.atleast_2d(y_up).reshape(-1, 1)
 
+        plot_sample_order(train_x, train_y)
+
 
         # because of saving sequence problem, the last one needs to be deleted
         # as it cannot be counted into training, otherwise, the mean for
@@ -870,7 +889,7 @@ def rebuild_surrogate_and_plot():
         testdata = np.linspace(problem_u.xl, problem_u.xu, 1000)
         testdata_y = upper_y_from_exghaustive_search(problem_l, problem_u, testdata, vio_setting)
 
-        out = trained_model_prediction(krg[0], train_x, train_y, train_x)
+        # out = trained_model_prediction(krg[0], train_x, train_y, train_x)
 
 
         ego_basic_train_predict(krg[0], krg_g, train_x, train_y, train_c, testdata,testdata_y, problem_u, folder)
