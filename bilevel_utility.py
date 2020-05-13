@@ -797,10 +797,10 @@ def rebuild_surrogate_and_plot():
     seed_index = 0
 
     for i in range(0, n, 2):
-    # for i in range(6, 8, 2):  # only test problem 4
+    # for i in range(8, 10, 2):  # only test problem 5
         problem_u = eval(target_problems[i])
         problem_l = eval(target_problems[i+1])
-        # seed_index = 3  # only for test problem 4
+        # seed_index = 4  # only for test problem 5
         seed = seedlist[seed_index]
         print(problem_u.name())
 
@@ -814,8 +814,10 @@ def rebuild_surrogate_and_plot():
         working_folder = os.getcwd()
         result_folder = working_folder + '\\' + folder + '\\' + problem + '_krgmodels'
         krgmodel_save = result_folder + '\\krg_' + str(seed) + '.joblib'
+        print(krgmodel_save)
         krg = joblib.load(krgmodel_save)
         krgmodel_save = result_folder + '\\krg_g_' + str(seed) + '.joblib'
+        print(krgmodel_save)
         krg_g = joblib.load(krgmodel_save)
 
 
@@ -829,9 +831,11 @@ def rebuild_surrogate_and_plot():
         # use krg model to get predicted data
         # load training data
         result_folder = working_folder + '\\' + folder + '\\' + problem + '_sampleddata'
-        traindata_file = result_folder + '\\sampled_data_x.csv'
+        traindata_file = result_folder + '\\sampled_data_x_' + str(seed)+'.csv'
+        print(traindata_file)
         x_both = np.loadtxt(traindata_file, delimiter=',')
-        traindata_file = result_folder + '\\sampled_data_y.csv'
+        traindata_file = result_folder + '\\sampled_data_y_' + str(seed)+'.csv'
+        print(traindata_file)
         y_up = np.loadtxt(traindata_file, delimiter=',')
 
         # extract upper level variable
@@ -853,6 +857,7 @@ def rebuild_surrogate_and_plot():
 
         # identify the violation value is set to what
         feasiflag_save = result_folder + '\\sampled_ll_feasi_' + str(seed) + '.joblib'
+        print(feasiflag_save)
         feasible_flag = joblib.load(feasiflag_save)
         feasible_flag = feasible_flag[0:-1]
         vio_list = np.argwhere(feasible_flag == False)
@@ -864,6 +869,9 @@ def rebuild_surrogate_and_plot():
         # create test data from variable bounds
         testdata = np.linspace(problem_u.xl, problem_u.xu, 1000)
         testdata_y = upper_y_from_exghaustive_search(problem_l, problem_u, testdata, vio_setting)
+
+        out = trained_model_prediction(krg[0], train_x, train_y, train_x)
+
 
         ego_basic_train_predict(krg[0], krg_g, train_x, train_y, train_c, testdata,testdata_y, problem_u, folder)
 
