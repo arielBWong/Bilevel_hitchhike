@@ -27,7 +27,8 @@ from bilevel_utility import surrogate_search_for_nextx, save_converge_plot,\
     save_before_reevaluation, save_function_evaluation, return_feasible,\
     hybridsearch_on_trueEvaluation, nofeasible_select, feasibility_adjustment_2,\
     save_feasibility,  feasibility_adjustment, saveEGOtraining, saveKRGmodel,\
-    feasibility_adjustment_3_dynamic, trained_model_prediction
+    feasibility_adjustment_3_dynamic, trained_model_prediction, localsearch_on_trueEvaluation,\
+    bilevel_localsearch, uplevel_localsearch_visual
 
 
 def return_current_extreme(train_x, train_y):
@@ -1438,7 +1439,8 @@ def main_bi_mo(seed_index, target_problem, enable_crossvalidation, method_select
     matching_xl = []
     feasible_check = []
 
-    #-----------start of initialization---------------------
+    #-----------start of initialization-----
+    # ----------------
     for xu in train_x_u:
         matching_x, matching_f, n_fev_local, feasible_flag = \
             search_for_matching_otherlevel_x(xu,
@@ -1472,8 +1474,8 @@ def main_bi_mo(seed_index, target_problem, enable_crossvalidation, method_select
     # infeasibility process 1: delete 2: set high value 3: dynamically high value
     # train_x_u, complete_x_u, complete_y_u, complete_c_u = \
         # feasibility_adjustment_2(train_x_u, complete_x_u, complete_y_u, complete_c_u, feasible_check)
-    train_x_u, complete_x_u, complete_y_u, complete_c_u = \
-        feasibility_adjustment_3_dynamic(train_x_u, complete_x_u, complete_y_u, complete_c_u, feasible_check)
+    complete_y_u = \
+        feasibility_adjustment_3_dynamic(complete_y_u, feasible_check)
 
     # sad adjustment of changes introduced by function feasibility_adjustment
     if target_problem_u.n_constr == 0:
@@ -1491,7 +1493,7 @@ def main_bi_mo(seed_index, target_problem, enable_crossvalidation, method_select
                    lower_bound=target_problem_u.xl)
 
     # before entering ego iteration, prepare next xu
-    searched_xu, _, _ = \
+    searched_xu, krg, krg_g = \
         surrogate_search_for_nextx(train_x_u,
                                    complete_y_u,  # bad naming
                                    complete_c_u,  # again bad naming
@@ -1500,6 +1502,21 @@ def main_bi_mo(seed_index, target_problem, enable_crossvalidation, method_select
                                    num_gen,
                                    method_selection,
                                    enable_crossvalidation)
+
+    trained_model_prediction(krg[0], train_x_u, complete_y_u, train_x_u)
+
+    # parameter needed for upper level local search
+    bi_para = \
+        {'search_iter': lower_interation,
+         'n_samples': number_of_initial_samples,
+         'problem': target_problem_l,
+         'level': 'lower',
+         'eim': eim_l,
+         'eim_pop': num_pop,
+         'eim_gen': num_gen,
+         'seed_index': seed_index,
+         'enable_crossvalidation': enable_crossvalidation,
+         'method_selection': method_selection}
 
 
     # find lower level problem complete for this new pop_x
@@ -1537,6 +1554,7 @@ def main_bi_mo(seed_index, target_problem, enable_crossvalidation, method_select
         # double check with feasibility returned from other level
         feasible_check = np.append(feasible_check, feasible_flag)
 
+
         # adding new xu yu to training
         train_x_u = np.vstack((train_x_u, searched_xu))
         complete_x_u = np.vstack((complete_x_u, new_complete_xu))
@@ -1545,12 +1563,16 @@ def main_bi_mo(seed_index, target_problem, enable_crossvalidation, method_select
             complete_c_u = np.vstack((complete_c_u, new_complete_cu))
         # after adding new sample
         # follow an adjust on feasibility
-        train_x_u, complete_x_u, complete_y_u, complete_c_u = \
-            feasibility_adjustment_3_dynamic(train_x_u, complete_x_u, complete_y_u, complete_c_u, feasible_check)
+        complete_y_u = \
+            feasibility_adjustment_3_dynamic(complete_y_u, feasible_check)
 
         # sad adjustment of changes introduced by function feasibility_adjustment
         if target_problem_u.n_constr == 0:
             complete_c_u = None
+
+        # parameter for upper level local search
+        n_before_ls = complete_x_u.shape[0] - 1  # at this stage, new variable is added
+
 
         if i > stop-number_of_initial_samples-1:
             break
@@ -1571,8 +1593,7 @@ def main_bi_mo(seed_index, target_problem, enable_crossvalidation, method_select
 
         # record convergence
         converge_track.append(np.min(complete_y_u))
-        # if i ==9:
-            # a = 0
+
         bu = np.min(complete_y_u)
         print('iteration %d, yu true evaluated/best so far: %.4f/%.4f ' % (i, new_complete_yu, bu))
 
@@ -1580,13 +1601,33 @@ def main_bi_mo(seed_index, target_problem, enable_crossvalidation, method_select
     # EGO training data save
     saveEGOtraining(complete_x_u, complete_y_u, folder, target_problem_u, seed_index)
 
-    print(complete_y_u)
-    print('predicted training')
-    out = trained_model_prediction(krg[0], train_x_u, complete_y_u, train_x_u)
-    print(out)
-
     # EGO model save
     saveKRGmodel(krg, krg_g, folder, target_problem_u, seed_index)
+
+    #----------upper local search -----------------
+    # invoke after upper level surrogate
+    # local search on upper level
+    # select best feasible xu and run a local search on it
+    # question: (how) do we include all the truely evaluated xu in EGO?
+    # current code include all the truely evaluated xu in EGO, needs test
+
+    new_local_xu, n_fev_local, feasible_check, complete_x_u, complete_y_u, complete_c_u = \
+        bilevel_localsearch(target_problem_u,
+                            complete_x_u,
+                            complete_y_u,
+                            complete_c_u,
+                            feasible_check,  # feasible_check is flag list for lower level variables
+                            **bi_para)
+    ll_nfev += n_fev_local
+    # adjust train_x_u when local se    arch add more samples
+    # potential question, local search bring xu too close to each other?
+    train_x_u = np.atleast_2d(complete_x_u[:, 0:target_problem_u.n_levelvar])
+
+    # this next function is only for visualization investigation
+    # not for real optimization
+    uplevel_localsearch_visual(complete_x_u, complete_y_u, complete_c_u, n_before_ls,
+                               krg, krg_g, seed_index, folder, target_problem_u)
+    # ------------end upper local search-------------------------------------
 
     # now upper iteration is finished
     # conduct a local search based on fl
@@ -1634,9 +1675,13 @@ def main_bi_mo(seed_index, target_problem, enable_crossvalidation, method_select
 
 
     # conduct a final local search based on best_xu_sofar
-    localsearch_xl, localsearch_fl, local_fev, _ = hybridsearch_on_trueEvaluation(matching_xl, 'lower', best_xu_sofar,
-                                                                               target_problem_l)
+    localsearch_xl, localsearch_fl, local_fev, feasible_flag \
+        = hybridsearch_on_trueEvaluation(matching_xl,
+                                         'lower',
+                                         best_xu_sofar,
+                                         target_problem_l)
     ll_nfev += local_fev
+    feasible_check = np.append(feasible_check, feasible_flag)
 
     new_complete_x = np.hstack((np.atleast_2d(best_xu_sofar), np.atleast_2d(localsearch_xl)))
     new_fl = target_problem_l.evaluate(new_complete_x, return_values_of=["F"])
@@ -1693,7 +1738,8 @@ def paral_args_temp(target_problems, seed_max, cross_val, methods_ops, alg_setti
     # to save surrogate model during the re-run
     args = []
     n = len(target_problems)
-    seedlist = [2, 0, 5, 8, 1, 6, 5, 6, 5, 6, 9]
+    # seedlist = [2(1), 0(2), 5(3), 1(4), 8(5), 6(6), 5(7), 6(8), 4(9), 1(10), 9(11)]
+    seedlist = [0, 5, 8, 6, 5, 4, 1, 9]
     seed = 0
     for j in np.arange(0, n, 2):
         for method in methods_ops:
@@ -1728,15 +1774,29 @@ if __name__ == "__main__":
 
     para_run = False
     if para_run:
-        seed_max = 11
-        args = paral_args_bi(target_problems, seed_max, False, methods_ops, alg_settings)
-        # args = paral_args_temp(target_problems, seed_max, False, methods_ops, alg_settings)
-        num_workers = 22
+        seed_max = 1
+        # args = paral_args_bi(target_problems, seed_max, False, methods_ops, alg_settings)
+        args = paral_args_temp(target_problems, seed_max, False, methods_ops, alg_settings)
+        num_workers = 4
         pool = mp.Pool(processes=num_workers)
         pool.starmap(main_bi_mo, ([arg for arg in args]))
     else:
-        i = 4
-        main_bi_mo(5, target_problems[i:i+2], False, 'eim', alg_settings)
+        # seedlist = [2, 0, 5, 1, 8, 6, 5, 6, 4, 1, 9]
+        i = 6
+        main_bi_mo(6, target_problems[i:i+2], False, 'eim', alg_settings)
+
+        '''
+        seedlist = [0, 5, 8, 6, 5, 4, 1, 9]
+        n = len(target_problems)
+        i = 0
+        for j in np.arange(0, n, 2):
+            for method in methods_ops:
+                seed = seedlist[i]
+                i = i+1
+                main_bi_mo(seed, target_problems[j:j + 2], False, 'eim', alg_settings)
+        '''
+
+
 
 
 
