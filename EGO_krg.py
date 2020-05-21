@@ -372,12 +372,12 @@ def initNormalization_by_nd(train_y):
 def init_xy(number_of_initial_samples, target_problem, seed, **kwargs):
 
     n_vals = target_problem.n_var
-    if kwargs is not None: # bilevel
+    if kwargs is not None:  # bilevel
         n_vals = target_problem.n_levelvar
     n_sur_cons = target_problem.n_constr
 
     # initial samples with hyper cube sampling
-    train_x = pyDOE.lhs(n_vals, number_of_initial_samples, criterion='maximin')#, iterations=1000)
+    train_x = pyDOE.lhs(n_vals, number_of_initial_samples, criterion='maximin')  #, iterations=1000)
 
     xu = np.atleast_2d(target_problem.xu).reshape(1, -1)
     xl = np.atleast_2d(target_problem.xl).reshape(1, -1)
@@ -1410,8 +1410,9 @@ def main_bi_mo(seed_index, target_problem, enable_crossvalidation, method_select
     print('Problem %s, seed %d' % (target_problem_u.name(), seed_index))
     print('Problem %s, seed %d' % (target_problem_l.name(), seed_index))
 
-    # number_of_initial_samples = 11 * n_vals - 1
-    number_of_initial_samples = exp_settings['number_of_initial_samples']
+    n_vals = target_problem_u.n_levelvar
+    number_of_initial_samples = 11 * n_vals - 1
+    # number_of_initial_samples = exp_settings['number_of_initial_samples']
     n_iter = 10000  # stopping criterion set
     converge_track = []
     folder = exp_settings['folder']
@@ -1422,6 +1423,7 @@ def main_bi_mo(seed_index, target_problem, enable_crossvalidation, method_select
 
     # init upper level variables, bilevel only init xu no evaluation is done
     train_x_u, train_y_u, cons_y_u = init_xy(number_of_initial_samples, target_problem_u, seed_index, **{'problem_type':'bilevel'})
+
 
     # test purpose for validation only
     # train_x_u = np.atleast_2d([0] * target_problem_u.n_levelvar)
@@ -1503,7 +1505,7 @@ def main_bi_mo(seed_index, target_problem, enable_crossvalidation, method_select
                                    method_selection,
                                    enable_crossvalidation)
 
-    trained_model_prediction(krg[0], train_x_u, complete_y_u, train_x_u)
+    # trained_model_prediction(krg[0], train_x_u, complete_y_u, train_x_u)
 
     # parameter needed for upper level local search
     bi_para = \
@@ -1625,12 +1627,13 @@ def main_bi_mo(seed_index, target_problem, enable_crossvalidation, method_select
 
     # this next function is only for visualization investigation
     # not for real optimization
-    uplevel_localsearch_visual(complete_x_u, complete_y_u, complete_c_u, n_before_ls,
-                               krg, krg_g, seed_index, folder, target_problem_u)
+    # uplevel_localsearch_visual(complete_x_u, complete_y_u, complete_c_u, n_before_ls,
+    #                            krg, krg_g, seed_index, folder, target_problem_u)
     # ------------end upper local search-------------------------------------
 
     # now upper iteration is finished
     # conduct a local search based on fl
+    # too redundent needs an improvement
     if target_problem_u.n_constr > 0:
         # return feasible, no feasible solutions refer to x
         # but return y first is a bit annoying
@@ -1672,6 +1675,13 @@ def main_bi_mo(seed_index, target_problem, enable_crossvalidation, method_select
         matching_xl = complete_x_u[best_solution_index, target_problem_u.n_levelvar:]
         best_xu_sofar = np.atleast_2d(best_xu_sofar)
         matching_xl = np.atleast_2d(matching_xl)
+        # for save fu
+        fu = complete_y_u[best_solution_index, :]
+        # for save fl
+        best_complete_x = np.atleast_2d(complete_x_u[best_solution_index, :])
+        fl = target_problem_l.evaluate(best_complete_x, return_values_of=["F"])
+        save_before_reevaluation(target_problem_u, target_problem_l, best_xu_sofar, matching_xl, fu, fl, seed_index,
+                                 method_selection, folder)
 
 
     # conduct a final local search based on best_xu_sofar
@@ -1679,7 +1689,9 @@ def main_bi_mo(seed_index, target_problem, enable_crossvalidation, method_select
         = hybridsearch_on_trueEvaluation(matching_xl,
                                          'lower',
                                          best_xu_sofar,
-                                         target_problem_l)
+                                         target_problem_l,
+                                         20,
+                                         50)
     ll_nfev += local_fev
     feasible_check = np.append(feasible_check, feasible_flag)
 
@@ -1782,21 +1794,8 @@ if __name__ == "__main__":
         pool.starmap(main_bi_mo, ([arg for arg in args]))
     else:
         # seedlist = [2, 0, 5, 1, 8, 6, 5, 6, 4, 1, 9]
-        i = 6
-        main_bi_mo(6, target_problems[i:i+2], False, 'eim', alg_settings)
-
-        '''
-        seedlist = [0, 5, 8, 6, 5, 4, 1, 9]
-        n = len(target_problems)
         i = 0
-        for j in np.arange(0, n, 2):
-            for method in methods_ops:
-                seed = seedlist[i]
-                i = i+1
-                main_bi_mo(seed, target_problems[j:j + 2], False, 'eim', alg_settings)
-        '''
-
-
+        main_bi_mo(1, target_problems[i:i+2], False, 'eim', alg_settings)
 
 
 

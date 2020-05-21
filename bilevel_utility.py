@@ -128,6 +128,11 @@ def feasibility_adjustment_3_dynamic(combine_y, feasibility):
 
 
 def search_for_matching_otherlevel_x(x_other, search_iter, n_samples, problem, level, eim, eim_pop, eim_gen,  seed_index, enable_crossvalidation, method_selection, **kwargs):
+
+    # for testing SMD problem;
+    D = problem.n_levelvar
+    n_samples = 11 * D - 1
+
     train_x, train_y, cons_y = init_xy(n_samples, problem, seed_index,
                                              **{'problem_type': 'bilevel'})
 
@@ -189,9 +194,9 @@ def search_for_matching_otherlevel_x(x_other, search_iter, n_samples, problem, l
             best_x = np.atleast_2d(best_x)
             best_y = np.min(complete_y)
         else:
-            print("no feasible found while ego on searching matching x")
+            # print("no feasible found while ego on searching matching x")
             best_x, best_y = nofeasible_select(complete_c, complete_y, train_x)
-            print("before local search, closest best y: %.4f" % best_y)
+            # print("before local search, closest best y: %.4f" % best_y)
     else:
         best_y_index = np.argmin(complete_y)
         best_x = train_x[best_y_index, :]
@@ -203,16 +208,19 @@ def search_for_matching_otherlevel_x(x_other, search_iter, n_samples, problem, l
         localsearch_on_trueEvaluation(best_x, 250, level, x_other, problem, None, None, None, None)
     n_fev = n_fev + search_iter + n_samples
 
-    print('local search %s level, before %.4f, after %.4f' % (level, best_y, localsearch_f))
-    print('local search found lx')
-    print(localsearch_x)
+    # print('local search %s level, before %.4f, after %.4f' % (level, best_y, localsearch_f))
+    # print('local search found lx')
+    # print(localsearch_x)
 
+    '''
     if problem.n_constr > 0:
         if len(complete_y_feasible) > 0:
-            print('feasible exist after surrogate for upper xu %0.4f' % x_other[0, 0])
+            print('feasible exist after surrogate for upper xu ')
+            print(x_other)
         else:
-            print('no feasible after surrogate for upper xu %0.4f' % x_other[0, 0])
-
+            print('no feasible after surrogate for upper xu %0.4f')
+            print(x_other)
+    '''
 
 
     # decide which x is returned
@@ -222,21 +230,21 @@ def search_for_matching_otherlevel_x(x_other, search_iter, n_samples, problem, l
             c = problem.evaluate(np.hstack((x_other, np.atleast_2d(localsearch_x))), return_values_of=["G"])
         else:
             c = problem.evaluate(np.hstack((np.atleast_2d(localsearch_x), x_other)), return_values_of=["G"])
-        print('local search return constraint:')
-        print(c)
+        # print('local search return constraint:')
+        # print(c)
         c[np.abs(c) < 1e-10] = 0
 
         # surrogate found feasible, consider local returns feasible
         # decide on smaller f value
         if len(complete_y_feasible) > 0:
             if np.any(c > 0):   # surrogate has feasible, local search has no
-                print('surrogate returns feasible, but local search not, return surrogate results')
-                print('surrogate constraint output is:')
+                # print('surrogate returns feasible, but local search not, return surrogate results')
+                # print('surrogate constraint output is:')
                 sc = problem.evaluate(np.hstack((x_other, np.atleast_2d(best_x))), return_values_of=["G"])
-                print(sc)
+                # print(sc)
                 return_tuple = (np.atleast_2d(best_x), np.atleast_2d(best_y), n_fev, True)
             else:
-                print('both surrogate and local search returns feasible, return smaller one')
+                # print('both surrogate and local search returns feasible, return smaller one')
                 feasible_flag = True
                 return_tuple = (localsearch_x, localsearch_f, n_fev, feasible_flag) \
                     if localsearch_f < best_y \
@@ -248,11 +256,11 @@ def search_for_matching_otherlevel_x(x_other, search_iter, n_samples, problem, l
             # localsearch also finds no feasible
             # only  flag matters, as this solution on upper level will be ignored or set 1e6
             if np.any(c > 0):
-                print('local search also has no feasible solution, return false flag')
+                # print('local search also has no feasible solution, return false flag')
                 feasible_flag = False
                 return_tuple = (localsearch_x, localsearch_f, n_fev, feasible_flag)
             else:  # local search found feasible while surrogate did not
-                print('local search found feasible while surrogate did not')
+                # print('local search found feasible while surrogate did not')
                 return_tuple = (localsearch_x, localsearch_f, n_fev, True)
     # no-constraint problem process
     else:
@@ -329,7 +337,7 @@ def localsearch_on_surrogate(train_x_l, complete_y,  ankor_x, problem):
 
     return pop_x, pop_f
 
-def hybridsearch_on_trueEvaluation(ankor_x, level, other_x, true_problem):
+def hybridsearch_on_trueEvaluation(ankor_x, level, other_x, true_problem, ea_pop, ea_gen):
 
     if ankor_x is None:
         para = {
@@ -379,8 +387,8 @@ def hybridsearch_on_trueEvaluation(ankor_x, level, other_x, true_problem):
                                None,
                                0.1,
                                0.9,
-                               20,
-                               50,
+                               ea_pop,
+                               ea_gen,
                                **para)
     best_x = pop_x[0]
     best_f = pop_f[0]
@@ -400,9 +408,9 @@ def hybridsearch_on_trueEvaluation(ankor_x, level, other_x, true_problem):
         # print('EA returns feasible solutions')
 
     best_x, best_f, nfev, _, _, _, _ = \
-        localsearch_on_trueEvaluation(best_x, 250, "lower", other_x, true_problem,
+        localsearch_on_trueEvaluation(best_x, 1000, "lower", other_x, true_problem,
                                       None, None, None, None)
-    nfev = nfev + 20*50
+    nfev = nfev + ea_pop * ea_gen
 
     best_x = np.atleast_2d(best_x)
 
@@ -452,26 +460,8 @@ def ankor_selection(data_x, data_y, data_c, target_problem):
 def bilevel_localsearch(target_problem_u, complete_x_u, complete_y_u, complete_c_u, feasible_check, **bi_para):
     # this method is designed to include steps of running a local search on upper level varible
     # it selects the current best xu, and run a local search from this xu
-
-    if target_problem_u.n_constr > 0:
-        complete_y_u_feas, complete_x_u_feas = return_feasible(complete_c_u, complete_y_u, complete_x_u)
-        complete_y_u_feas = np.atleast_2d(complete_y_u_feas).reshape(-1, target_problem_u.n_obj)
-        complete_x_u_feas = np.atleast_2d(complete_x_u_feas).reshape(-1, target_problem_u.n_var)
-        if len(complete_y_u_feas) > 0:  # deal with feasible solutions
-            # identify best feasible solution
-            min_fu_index = np.argmin(complete_y_u_feas)
-            # extract xu
-            best_xu_sofar = np.atleast_2d(complete_x_u_feas[min_fu_index, 0:target_problem_u.n_levelvar])
-        else:  # process situation where no feasible solutions
-            print('no feasible solution found on upper level')
-            # nofeasible_select(constr_c, train_y, train_x):
-            best_xu_complete, best_yu = nofeasible_select(complete_c_u, complete_y_u, complete_x_u)
-            best_xu_sofar = best_xu_complete[0, 0:target_problem_u.n_levelvar]
-    else:  # process for uncontraint problems
-        best_solution_index = np.argmin(complete_y_u)
-        best_xu_sofar = complete_x_u[best_solution_index, 0:target_problem_u.n_levelvar]
-
-    best_xu_sofar = np.atleast_2d(best_xu_sofar)
+    best_xu, _ = ankor_selection(complete_x_u, complete_y_u, complete_c_u, target_problem_u)
+    best_xu_sofar = np.atleast_2d(best_xu)
 
     new_xu, new_fu, n_fev_local, feasible_check, complete_x_u, complete_y_u, complete_c_u = \
         localsearch_on_trueEvaluation(best_xu_sofar,
@@ -505,58 +495,96 @@ def localsearch_on_trueEvaluation(ankor_x, max_eval, level_s, other_x, true_prob
         nonlocal complete_x_u
         nonlocal complete_y_u
         nonlocal complete_c_u
+        nonlocal true_problem
+        nonlocal bi_matching_x
 
         x = np.atleast_2d(x)
-        if other_x is not None:
+        if other_x is not None:  # means single level optimization
             if level_s == 'lower':
                 x = np.hstack((other_x, x))
             else:
                 x = np.hstack((x, other_x))
             return true_problem.evaluate(x,  return_values_of=["F"])
-        else:  # indicate a local search on upper level
+        else:  # indicate a local search on upper level/bilevel optimization wrapper
+            # the local search optimization framework seems calculate constraint first, so
+            # should wait for contraint update the xl
+            # but also have to be compatible if upper level is unconstraint problem
+            if true_problem.n_constr > 0:
+                # assume contraint objective function has calculated
+                # bilevel_match xl
+                bi_matching_x = np.atleast_2d(bi_matching_x)  # double security
+                x = np.hstack((x, bi_matching_x))
+                f, c = true_problem.evaluate(x, return_values_of=["F", "G"])
+            else:  # process for unconstraint problem
+                matching_xl, matching_fl, n_fev_local, feasible_flag = \
+                    search_for_matching_otherlevel_x(x, **bi_para)
+                up_evalcount = up_evalcount + n_fev_local
+                # bilevel local search only happens on upper level
+                # so combination of variables has only one  form
+                bi_matching_x = np.atleast_2d(matching_xl)  # double security
+                x = np.hstack((x, bi_matching_x))
+                f, c = true_problem.evaluate(x, return_values_of=["F", "G"])
+
+                # if lower level return infeasible solution xl
+                # f value of upper level needs to be changed to penalty values
+                # double check with feasibility returned from other level
+                feasible_check = np.append(feasible_check, feasible_flag)
+
+                # adding new xu yu to training
+                complete_x_u = np.vstack((complete_x_u, x))
+                complete_y_u = np.vstack((complete_y_u, f))
+                complete_c_u = np.vstack((complete_c_u, c))
+                if feasible_flag is False:
+                    complete_y_u = feasibility_adjustment_3_dynamic(complete_y_u, feasible_check)
+                    f = np.atleast_2d(complete_y_u[-1, :])
+
+                #  n = complete_x_u.shape[0]
+                # print('local search changing check: %d'% n)
+                # print('return f: %d' % f)
+            return f
+
+    def cons_func(x):
+
+        nonlocal feasible_check
+        nonlocal up_evalcount
+        nonlocal complete_x_u
+        nonlocal complete_y_u
+        nonlocal complete_c_u
+        nonlocal true_problem
+        nonlocal bi_matching_x
+
+        x = np.atleast_2d(x)
+        if other_x is not None:  # means single level optimization
+            if level_s == 'lower':
+                x = np.hstack((other_x, x))
+            else:
+                x = np.hstack((x, other_x))
+
+            constr = true_problem.evaluate(x, return_values_of=["G"])
+        else:  # deal with bi-level local search condition
 
             matching_xl, matching_fl, n_fev_local, feasible_flag = \
                 search_for_matching_otherlevel_x(x, **bi_para)
-
             up_evalcount = up_evalcount + n_fev_local
-            # bilevel local search only happens on upper level
-            # so combination of variables has only one situation
+            # bi-level local search only happens on upper level
+            # so combination of variables has only one form
             bi_matching_x = np.atleast_2d(matching_xl)  # double security
             x = np.hstack((x, bi_matching_x))
-            f, c = true_problem.evaluate(x, return_values_of=["F", "G"])
+
+            F, constr = true_problem.evaluate(x, return_values_of=["F", "G"])
 
             # if lower level return infeasible solution xl
             # f value of upper level needs to be changed to penalty values
             # double check with feasibility returned from other level
             feasible_check = np.append(feasible_check, feasible_flag)
 
-            # adding new xu yu to training
-
+            # adding new xu yu to training samples
             complete_x_u = np.vstack((complete_x_u, x))
-            complete_y_u = np.vstack((complete_y_u, f))
-            complete_c_u = np.vstack((complete_c_u, c))
+            complete_y_u = np.vstack((complete_y_u, F))
+            complete_c_u = np.vstack((complete_c_u, constr))
             if feasible_flag is False:
                 complete_y_u = feasibility_adjustment_3_dynamic(complete_y_u, feasible_check)
-                f = np.atleast_2d(complete_y_u[-1, :])
 
-            n = complete_x_u.shape[0]
-            print('changing check: %d'% n)
-            print('return f: %d' % f)
-            return f
-
-    def cons_func(x):
-        x = np.atleast_2d(x)
-        if other_x is not None:
-            if level_s == 'lower':
-                x = np.hstack((other_x, x))
-            else:
-                x = np.hstack((x, other_x))
-        else:  # deal with bilevel local search condition
-            # constraint should only be calculated after bilevel matching
-            # otherwise... huston huston we've got a problem
-            # solution is move the lower level search to this method
-            x = np.hstack((x, bi_matching_x))
-        constr = true_problem.evaluate(x, return_values_of=["G"])
         constr = constr * -1
         return constr.ravel()
 
@@ -810,7 +838,7 @@ def trained_model_prediction(krg, train_x, train_y, test_x):
 
 
 
-def ego_basic_train_predict(krg, krg_g, train_x, train_y, train_c, test_x, test_y, problem_u, folder):
+def ego_basic_train_predict(krg, krg_g, train_x, train_y, train_c, test_x, test_y, infeasible, problem_u, folder):
     # this method is only a service function for the  method
     # rebuild_surrogate_and_plot()
     # only works for one krg
@@ -855,11 +883,12 @@ def ego_basic_train_predict(krg, krg_g, train_x, train_y, train_c, test_x, test_
         train_c_norm = None
 
 
-    plt.ion()
+
     fig = plt.figure()
     ax1 = fig.add_subplot(111)
     ax1.set_xlabel('design variable')
     ax1.set_ylabel('f and predicted f value')
+    # comment following line only for test/ should comment
     ax1.scatter(test_x.ravel(), pred_y.ravel(), marker='|', c='g')
     ax1.scatter(test_x.ravel(), test_y, c='r')
     # ax1.fill_between(test_x.ravel(), (pred_y + pred_y_sig_norm).ravel(), (pred_y - pred_y_sig_norm).ravel(), alpha=0.5)
@@ -871,6 +900,12 @@ def ego_basic_train_predict(krg, krg_g, train_x, train_y, train_c, test_x, test_
         infeas_y = infeas_pair[:, 1]
         ax1.scatter(infeas_x, infeas_y, c='k')
         ax1.legend(['EGO kriging', 'exghaustive search', 'training', 'infeasible'])
+        # for test-------
+        # inf_testx = test_x[infeasible, :]
+        # inf_testy = test_y[infeasible, :]
+        # ax1.scatter(inf_testx, inf_testy, c='k')
+        # for test-------
+
     else:
         ax1.legend(['EGO kriging', 'exghaustive search', 'training'])
 
@@ -884,7 +919,7 @@ def ego_basic_train_predict(krg, krg_g, train_x, train_y, train_c, test_x, test_
     plt.savefig(plotsave, format='png')
 
     # plt.show()
-    plt.ioff()
+
 
 def get_infeasible_subset(data_x, data_y, data_c):
     # this function extracts infeasible subset from x-y pair
@@ -892,36 +927,32 @@ def get_infeasible_subset(data_x, data_y, data_c):
     data_y = check_array(data_y)
     data_c = check_array(data_c)
 
+    data_g = copy.deepcopy(data_c)
+    data_g[np.abs(data_g) < 1e-10] = 0
+    data_g[data_g <= 0] = 0
+    data_cg = data_g.sum(axis=1)
+    infeasible = np.nonzero(data_cg)
 
-    infeas_pair = []
-    n_x = data_x.shape[0]
-    for j in range(n_x):
-        cons_y = np.atleast_2d(data_c[j, :]).reshape(1, -1)  # check feasibility one by one
-        cons_y[np.abs(cons_y) < 1e-10] = 0
-        if np.any(cons_y) > 0:  # mark infeasible
-            pair = [data_x[j, 0], data_y[j, 0]]  # x has to be one variable, y
-            infeas_pair = np.append(infeas_pair, pair)
-        else:
-            continue
-    infeas_pair = np.atleast_2d(infeas_pair).reshape(-1, 2)
+    x_infeasible = np.atleast_2d(data_x[infeasible, :]).reshape(-1, 1)
+    y_infeasible = np.atleast_2d(data_y[infeasible, :]).reshape(-1, 1)
+
+    infeas_pair = np.hstack((x_infeasible, y_infeasible))
 
     return infeas_pair
 
 
-
-
-
-def upper_y_from_exghaustive_search(problem_l, problem_u, xu_list,vio_value):
-    # this function is only a service function for
-    # rebuild_surrogate_and_plot()
+def upper_y_from_exghaustive_search(problem_l, problem_u, xu_list, vio_value):
+    #  this function is only a service function for
+    #  rebuild_surrogate_and_plot()
     fu = []
 
     n = xu_list.shape[0]
     xl = []
+    vio_list = []
     for i in range(n):
         xu = np.atleast_2d(xu_list[i, :])
         localsearch_xl, localsearch_fl, local_fev, flag = \
-            hybridsearch_on_trueEvaluation(None, 'lower', xu, problem_l)
+            hybridsearch_on_trueEvaluation(None, 'lower', xu, problem_l, 100, 100)
 
         combo_x = np.hstack((xu, localsearch_xl))
         fu_i = problem_u.evaluate(combo_x, return_values_of=["F"])
@@ -931,12 +962,14 @@ def upper_y_from_exghaustive_search(problem_l, problem_u, xu_list,vio_value):
         if flag is False:
             if vio_value is not None:
                 fu_i = vio_value
+                vio_list = np.append(vio_list, False)
             # print('False lower')
+        else:
+            vio_list = np.append(vio_list, True)
         fu = np.append(fu, fu_i)
 
     xl = np.atleast_2d(xl).reshape(-1, problem_l.n_levelvar)
-
-    return fu, xl
+    return fu, xl, vio_list
 
 def plot_sample_order(train_x, train_y, problem_u, seed):
     # this function plots the value of x to y in the order of samples
@@ -989,9 +1022,11 @@ def rebuild_surrogate_and_plot():
     n = len(target_problems)
     # seedlist = [2, 0, 5, 8, 1, 6, 5, 6, 5, 6, 9]   # median seeds from no sample in infeasible regions
     seedlist = [2, 0, 5, 1, 8, 6, 5, 6, 4, 1, 9]    # median seeds from dynamic values from infeasible regions
-    seed_index = 0
+    seed_index = 10
+    # seed_index = 0
 
-    for i in range(0, n, 2):
+    # for i in range(0, n, 2):
+    for i in range(0, 2, 2):
     # for i in range(8, 10, 2):  # only test problem 5
         problem_u = eval(target_problems[i])
         problem_l = eval(target_problems[i+1])
@@ -1062,7 +1097,7 @@ def rebuild_surrogate_and_plot():
 
         # create test data from variable bounds
         testdata = np.linspace(problem_u.xl, problem_u.xu, 1000)
-        testdata_y, xl = upper_y_from_exghaustive_search(problem_l, problem_u, testdata, vio_setting)
+        testdata_y, xl, _ = upper_y_from_exghaustive_search(problem_l, problem_u, testdata, vio_setting)
 
         # save these test data
         result_folder = working_folder + '\\' + folder + '\\real_function'
@@ -1076,8 +1111,207 @@ def rebuild_surrogate_and_plot():
         save_test = np.hstack((testdata, xl, testdata_y))  # save both level variables
         np.savetxt(savefile, save_test, delimiter=',')
 
+        # test: violation on upper
+        complete_x = np.hstack((testdata, xl))
+        upper_c = problem_u.evaluate(complete_x, return_values_of=['G'])
+        upper_c[np.abs(upper_c) < 1e-10] = 0
+        all_g = copy.deepcopy(upper_c)
+
+        all_g[all_g <= 0] = 0
+        all_cv = all_g.sum(axis=1)
+        infeasible = np.nonzero(all_cv)
+        a = np.linspace(0, 1000, 1000, dtype=int)
+        feasible = np.setdiff1d(a, infeasible)
+
         # comment the following function, if only want to save test data
-        # ego_basic_train_predict(krg[0], krg_g, train_x, train_y, train_c, testdata,testdata_y, problem_u, folder)
+        ego_basic_train_predict(krg[0], krg_g, train_x, train_y, train_c, testdata, testdata_y, infeasible, problem_u, folder)
+
+def SMD_invest(problem_u, problem_l, vio_setting):
+    # this function aims to form the plot
+    # compare lower f of exghausive search and surrogate search
+    #
+
+    # create test data from variable bounds
+    # testdata = np.linspace(problem_u.xl, problem_u.xu, 1000)
+    testdata, _, _ = init_xy(1000, problem_u, 0, **{'problem_type': 'bilevel'})
+    # testdata_y, xl, vio_list = upper_y_from_exghaustive_search(problem_l, problem_u, testdata, vio_setting)
+
+    eim_l = EI.EIM(problem_l.n_levelvar, n_obj=1, n_constr=0,
+                   upper_bound=problem_l.xu,
+                   lower_bound=problem_l.xl)
+    xl = []
+    fl = []
+    for i in range(1000):
+        xu = np.atleast_2d(testdata[i, :])
+        matching_x, matching_f, n_fev_local, feasible_flag = \
+            search_for_matching_otherlevel_x(xu,
+                                             30,
+                                             20,
+                                             problem_l,
+                                             'lower',
+                                             eim_l,
+                                             100,
+                                             100,
+                                             0,
+                                             False,
+                                             'eim')
+        xl = np.append(xl, matching_x)
+        fl = np.append(fl, matching_f)
+    xl = np.atleast_2d(xl).reshape(-1, problem_l.n_levelvar)
+    fl = np.atleast_2d(fl).reshape(-1, problem_l.n_obj)
+    testdata = np.atleast_2d(testdata)
+    x_comb = np.hstack((testdata, xl))
+    testdata_y = problem_u.evaluate(x_comb, return_values_of=['F'])
+
+
+
+
+
+
+
+    problem = problem_u.name()[0:-2]
+    working_folder = os.getcwd()
+    folder = 'bi_output'
+    seed = 0
+
+    # save these test data
+    result_folder = working_folder + '\\' + folder + '\\real_function'
+    if not os.path.isdir(result_folder):
+        os.mkdir(result_folder)
+
+    #savefile = result_folder + '\\' + problem + '_testdate_gen_seed_' + str(seed) + '.csv'
+    savefile = result_folder + '\\' + problem + '_testdate_sur_seed_' + str(seed) + '.csv'
+    testdata = np.atleast_2d(testdata).reshape(-1, problem_u.n_levelvar)
+    testdata_y = np.atleast_2d(testdata_y).reshape(-1, problem_u.n_obj)
+    # save_test = np.hstack((testdata, xl, testdata_y))  # save both level variables
+    save_test = np.hstack((testdata, xl, testdata_y, fl))
+
+    np.savetxt(savefile, save_test, delimiter=',')
+
+
+    # ax3 = fig.add_subplot(223)
+    # ax2 = fig.add_subplot(222)
+    # ax4 = fig.add_subplot(224)
+
+def SMD_invest_visualisation(problem_u, problem_l):
+    # this method is only a consequent
+    # visualization method SMD_invest
+    # only after the above method generates data
+    # this method can be used
+
+    problem = problem_u.name()[0:-2]
+    working_folder = os.getcwd()
+    folder = 'bi_output'
+    seed = 0
+
+    # save these test data
+    result_folder = working_folder + '\\' + folder + '\\real_function'
+    if not os.path.isdir(result_folder):
+        os.mkdir(result_folder)
+
+    savefile = result_folder + '\\' + problem + '_testdate_gen_seed_' + str(seed) + '.csv'
+    testdata = np.loadtxt(savefile, delimiter=',')
+    testdata_y = testdata[:, -1]
+
+    # calculate fl from data
+    complete_x = testdata[:, 0:-1]
+    fl = problem_l.evaluate(complete_x, return_values_of=['F'])
+
+    # read surrogate model saved results
+    savefile = result_folder + '\\' + problem + '_testdate_sur_seed_' + str(seed) + '.csv'
+    surdata = np.loadtxt(savefile, delimiter=',')
+    fl_sur = surdata[:, -1]
+    fu_sur = surdata[:, -2]
+
+    xu_sur = surdata[:, 0: problem_u.n_levelvar]
+    xl_sur = surdata[:, problem_u.n_levelvar: problem_u.n_var]
+
+    #
+
+    range_fu = []
+    range_fu = np.append(range_fu, testdata_y)
+    range_fu = np.append(range_fu, fu_sur)
+    z_max = np.max(range_fu) + 1
+    z_min = np.min(range_fu) - 1
+
+    range_fl = []
+    range_fl = np.append(range_fu, fl)
+    range_fl = np.append(range_fu, fl_sur)
+    l_max = np.max(range_fu) + 1
+    l_min = np.min(range_fu) - 1
+    # the plot should have 4 subplots
+    #
+    from mpl_toolkits.mplot3d import Axes3D
+    fig = plt.figure(figsize=(20, 20))
+
+    # ------------------------------------------
+    # plot upper level fu with exhausive search
+    ax1 = fig.add_subplot(221, projection='3d')
+    ax1.set_xlabel('xu1')
+    ax1.set_xlim([-5, 10])
+    ax1.set_ylabel('xu2')
+    ax1.set_ylim([-5, 1])
+    ax1.set_zlim([z_min, z_max])
+    ax1.set_zlabel('fu')
+    cm = plt.cm.get_cmap('RdYlBu')
+    cl1 = ax1.scatter(testdata[:, 0], testdata[:, 1],
+                      testdata_y.ravel(), c=testdata_y.ravel(),
+                      cmap=cm, vmin=z_min, vmax=z_max)
+    ax1.set_title('fu with exhausive search')
+    fig.colorbar(cl1, ax=ax1)
+
+    # -------------------------------------------
+    # plot lower level fl from exhausive search
+    ax2 = fig.add_subplot(223, projection='3d')
+    ax2.set_xlabel('xu1')
+    ax2.set_xlim([-5, 10])
+    ax2.set_ylabel('xu2')
+    ax2.set_ylim([-5, 1])
+    ax2.set_zlabel('fl')
+    ax2.set_zlim([l_min, l_max])
+    cl2 = ax2.scatter(testdata[:, 0], testdata[:, 1],
+                      fl.ravel(), c=fl.ravel(),
+                      cmap=cm, vmin=l_min, vmax=l_max)
+    ax2.set_title('fl with exhausive search')
+
+    fig.colorbar(cl2, ax=ax2)
+
+    # -----------------------------------------
+    # plot upper level fu from surrogate results
+    ax3 = fig.add_subplot(222, projection='3d')
+    ax3.set_xlabel('xu1')
+    ax3.set_xlim([-5, 10])
+    ax3.set_ylabel('xu2')
+    ax3.set_ylim([-5, 1])
+    ax3.set_zlim([z_min, z_max])
+    cl3 = ax3.scatter(xu_sur[:, 0], xu_sur[:, 1],
+                      fu_sur, c=fu_sur,
+                      cmap=cm, vmin=z_min, vmax=z_max)
+    ax3.set_title('fu with EGO hybrid search')
+    fig.colorbar(cl3, ax=ax3)
+
+
+    #-----------------------------------------
+    # plot lower level fu from surrogate results
+    ax4 = fig.add_subplot(224, projection='3d')
+    ax4.set_xlabel('xu1')
+    ax4.set_xlim([-5, 10])
+    ax4.set_ylabel('xu2')
+    ax4.set_ylim([-5, 1])
+    ax4.set_zlim([l_min, l_max])
+    cl4 = ax4.scatter(xu_sur[:, 0], xu_sur[:, 1],
+                      fl_sur, c=fl_sur,
+                      cmap=cm, vmin=l_min, vmax=l_max)
+    ax4.set_title('fl with EGO hybrid search')
+    fig.colorbar(cl4, ax=ax4)
+
+
+
+
+
+    # plt.show()
+    plot_save= result_folder + '\\' + problem + '_llsearch_vis_' + str(seed) + '.png'
+    plt.savefig(plot_save)
 
 
 
@@ -1153,6 +1387,10 @@ def results_process_bestf(BO_target_problems, method_selection, seedmax, folder)
     feas_across_problems = []
     median_seed_accrossProblems = []
     pname_list = []
+
+    seedlist = [0, 5, 8, 6, 5, 4, 1, 9]  # test only
+
+    seed_i = 0
     for j in np.arange(0, n, 2):
         target_problem = BO_target_problems[j]
         target_problem = eval(target_problem)
@@ -1164,17 +1402,21 @@ def results_process_bestf(BO_target_problems, method_selection, seedmax, folder)
         result_folder = working_folder + '\\' + folder + '\\' + problem_name + '_' + method_selection
 
         accuracy_data = []
-        for seed_index in range(seedmax):
-            # saveName = result_folder + '\\accuracy_before_evaluation' + str(seed_index) + '.csv'
-            saveName = result_folder + '\\accuracy_' + str(seed_index) + '.csv'
-            data = np.loadtxt(saveName, delimiter=',')
-            accuracy_data = np.append(accuracy_data, data)
+        # for seed_index in range(seedmax):
+        #------- move back for indent correction, when uncomment the above line
+        seed_index = seedlist[seed_i]  # test only
+        # saveName = result_folder + '\\accuracy_before_evaluation' + str(seed_index) + '.csv'
+        saveName = result_folder + '\\accuracy_' + str(seed_index) + '.csv'
+        data = np.loadtxt(saveName, delimiter=',')
+        accuracy_data = np.append(accuracy_data, data)
+        seed_i = seed_i + 1  # test only
+        #-------------------------------------------------------------------------
 
         accuracy_data = np.atleast_2d(accuracy_data).reshape(-1, 2)
 
         # select median with ul and corresponding ll
         ul_accuracy = np.array(accuracy_data[:, 0])
-        seed_median  = np.argsort(ul_accuracy)[int(seedmax/2)]
+        seed_median = np.argsort(ul_accuracy)[int(seedmax/2)]
         # accuracy_median is for one value
         accuracy_median = accuracy_data[seed_median, :]
 
@@ -1224,6 +1466,10 @@ def combine_fev(BO_target_problems, method_selection, max_seed):
 
     folders = ['bi_output']  #, 'bi_local_output']
     mean_cross_strategies = []
+
+    seedlist = [0, 5, 8, 6, 5, 4, 1, 9]  # test only
+    seed_i = 0
+
     for folder in folders:
         pname_list = []
         mean_smds = []
@@ -1238,12 +1484,18 @@ def combine_fev(BO_target_problems, method_selection, max_seed):
             result_folder = working_folder + '\\' + folder + '\\' + problem_name + '_' + method_selection
 
             n_fev = []
-            for seed_index in range(max_seed):
-                saveName = result_folder + '\\ll_nfev' + str(seed_index) + '.csv'
-                data = np.loadtxt(saveName, delimiter=',')
-                n_fev = np.append(n_fev, data)
+            # ------this section to mark where to indent when uncomment the following 'for' line
+            # for seed_index in range(max_seed):
+            seed_index = seedlist[seed_i]
+            saveName = result_folder + '\\ll_nfev' + str(seed_index) + '.csv'
+            data = np.loadtxt(saveName, delimiter=',')
+            n_fev = np.append(n_fev, data)
+            #----------------------------------------------
+
             mean_nfev = np.median(n_fev)
             mean_smds = np.append(mean_smds, mean_nfev)
+
+            seed_i = seed_i + 1
 
         mean_cross_strategies = np.append(mean_cross_strategies, mean_smds)
 
@@ -1287,7 +1539,6 @@ def results_process_before_after(BO_target_problems, method_selection, alg_folde
     median_data = np.atleast_2d(median_data).reshape(-1, 2)
 
     return median_data
-
 
 # component function of outer_process
 def process_before_after(BO_target_problems, method_selection, alg_folder):
@@ -1451,7 +1702,6 @@ def compare_python_matlab():
     saveName = 'pm_compare.csv'
     h.to_csv(saveName)
 
-
 def visualization_smd3(problem, seed_index):
     from mpl_toolkits.mplot3d import Axes3D
     import matplotlib.pyplot as plt
@@ -1524,7 +1774,6 @@ def plotCountour():
     fig.colorbar(cs, ax=ax)
     plt.show()
 
-
 def uplevel_localsearch_visual(train_x, train_y, train_c, n_before_ls,
                                krg, krg_g, seed, folder, problem_u):
     # this function plots surrogate's samples
@@ -1543,37 +1792,50 @@ def uplevel_localsearch_visual(train_x, train_y, train_c, n_before_ls,
     test_x = testdata[:, 0]  # only process one variable problem
     test_y = testdata[:, -1]  # only process one variable problem
 
+    # real function also needs plot infeasibility
+    n_c = problem_u.n_constr
+    if n_c > 0:
+        both_x = np.atleast_2d(testdata[:, 0:-1]).reshape(-1, problem_u.n_var)
+        test_c = problem_u.evaluate(both_x, return_values_of=['G'])
+        test_y = np.atleast_2d(test_y).reshape(-1, 1)
+        test_x = np.atleast_2d(test_x).reshape(-1, 1)
+
+        test_inf = get_infeasible_subset(test_x, test_y, test_c)
+
 
     # (2) prepare data for plotting surrogate
     # use test_x for creating surrogate for plot
     # make sure the train_x, train_y from EGO main process has no extra sample to ruin the krg prediction
     before_ls_x = np.atleast_2d(train_x[0: n_before_ls, :]).reshape(-1, problem_u.n_var)
     before_ls_y = np.atleast_2d(train_y[0: n_before_ls, :]).reshape(-1, problem_u.n_obj)
+    if n_c > 0:
+        before_ls_c = np.atleast_2d(train_c[0: n_before_ls, :]).reshape(-1, problem_u.n_constr)
 
     train_x_of_surrogate = np.atleast_2d(before_ls_x[:, 0:problem_u.n_levelvar])
     train_y_of_surrogate = np.atleast_2d(before_ls_y[:, 0:problem_u.n_obj])
+    if n_c > 0:
+        train_c_of_surrogate = np.atleast_2d(before_ls_c[:, 0:problem_u.n_constr])
+
     pred_y = trained_model_prediction(krg[0], train_x_of_surrogate, train_y_of_surrogate, test_x)
     pred_y = np.atleast_2d(pred_y)
 
     # consider the problem with constraint
-    # mark those in test that are
-    n_c = problem_u.n_constr
+    # mark those in test that are violation of contraints
+
     cons_y = []
     if n_c > 0:
         for i in range(n_c):
-            train_cs = np.atleast_2d(train_c[:, i]).reshape(-1, 1)
-            cons_c = trained_model_prediction(krg_g[i], train_x, train_cs)
+            train_c_surr_column = np.atleast_2d(train_c_of_surrogate[:, i]).reshape(-1, 1)  # one constraint
+            cons_c = trained_model_prediction(krg_g[i], train_x_of_surrogate, train_c_surr_column, test_x)
             cons_y = np.append(cons_y, cons_c)
-        cons_y = np.atleast_2d(cons_y).reshape(-1, n_c, order='G')
+        cons_y = np.atleast_2d(cons_y).reshape(-1, n_c, order='F')
+        test_x = np.atleast_2d(test_x).reshape(-1, 1)
         infeasi_pred_pair = get_infeasible_subset(test_x, pred_y, cons_y)
 
     # (3) prepare data to plot local search plot
     # identify local search starting point
-    if n_c > 0:
-        before_ls_c = np.atleast_2d(train_c[0: n_before_ls, :]).reshape(-1, problem_u.n_constr)
-    else:
+    if n_c == 0:
         before_ls_c = None
-
 
     # ankor returned level variable
     selected_x, selected_f = ankor_selection(before_ls_x, before_ls_y, before_ls_c, problem_u)
@@ -1599,10 +1861,10 @@ def uplevel_localsearch_visual(train_x, train_y, train_c, n_before_ls,
     ax2.scatter(test_x.ravel(), pred_y.ravel(), c='g')
     ax2.scatter(train_x_of_surrogate, train_y_of_surrogate, marker='x', c='r')
     if n_c > 0:
-        ax2.scatter(infeasi_pred_pair[:, 0], infeasi_pred_pair[:, 1], c='b')
-        ax2.legend(['surrogates', 'infeasible'])
-    ax2.set_title('surrogates approximation')
+        ax1.scatter(test_inf[:, 0], test_inf[:, 1], s=1, c='k')
+        ax2.scatter(infeasi_pred_pair[:, 0], infeasi_pred_pair[:, 1], s=1, c='k')
 
+    ax2.set_title('surrogates approximation')
 
     # plot local search
     cm3 = plt.cm.get_cmap('RdYlBu')
@@ -1613,7 +1875,10 @@ def uplevel_localsearch_visual(train_x, train_y, train_c, n_before_ls,
 
     ax3.scatter(selected_x[0], selected_f[0], c='k', marker='X')
     ax2.scatter(selected_x[0], selected_f[0], c='k', marker='X') # plot to 2nd plot
-    ax2.legend(['surrogate prediction', 'training samples', 'ls start pick'])
+    if n_c > 0:
+        ax2.legend(['surrogates prediction', 'training samples', 'infeasible', 'ls start pick'])
+    else:
+        ax2.legend(['surrogate prediction', 'training samples', 'ls start pick'])
     ax3.scatter(after_ls_x.ravel()[-1], after_ls_y.ravel()[-1], c='g', marker='X')
     fig.colorbar(cs3, ax=ax3)
     ax3.legend(['ls progress colormap', 'ls start', 'ls end'])
@@ -1629,6 +1894,13 @@ def uplevel_localsearch_visual(train_x, train_y, train_c, n_before_ls,
     ax2.set_ylim(y_min, y_max)
     ax3.set_ylim(y_min, y_max)
 
+    x_min = problem_u.xl
+    x_max = problem_u.xu
+    ax1.set_xlim(x_min, x_max)
+    ax2.set_xlim(x_min, x_max)
+    ax3.set_xlim(x_min, x_max)
+
+
     result_folder = working_folder + '\\' + folder + '\\upper_ls_plot'
     if not os.path.isdir(result_folder):
         os.mkdir(result_folder)
@@ -1638,30 +1910,13 @@ def uplevel_localsearch_visual(train_x, train_y, train_c, n_before_ls,
     # plt.show()
 
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 def test_if(a,b):
     a = (True, False) if a > b else (False, True)
     return zip(a)
 
 if __name__ == "__main__":
 
-    rebuild_surrogate_and_plot()
+    # rebuild_surrogate_and_plot()
 
     # problems_json = 'p/bi_problems'
     problems_json = 'p/bi_problems_test'
@@ -1669,9 +1924,12 @@ if __name__ == "__main__":
         hyp = json.load(data_file)
     target_problems = hyp['BO_target_problems']
 
-    print(target_problems[2])
-    problem_u = eval(target_problems[2])
-    problem_l = eval(target_problems[3])
+    problem_u = eval(target_problems[0])
+    problem_l = eval(target_problems[1])
+
+    # SMD_invest(problem_u, problem_l, 200)
+    SMD_invest_visualisation(problem_u, problem_l)
+
 
 
     # EGO_rebuildplot(problem_u, 'bi_output')
@@ -1680,8 +1938,8 @@ if __name__ == "__main__":
     # ------------ result process--------------
     # problems = target_problems
     # folder = hyp['alg_settings']['folder']
-    # results_process_bestf(problems, 'eim', 11, folder)
-    # combine_fev(problems, 'eim', 11)
+    # results_process_bestf(problems, 'eim', 1, folder)
+    # combine_fev(problems, 'eim', 1)
     # results_process_before_after(problems, 'eim', 'bi_output', 'accuracy', 29)
     # --------------result process ------------
 
