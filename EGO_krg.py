@@ -1556,13 +1556,13 @@ def main_bi_mo(seed_index, target_problem, enable_crossvalidation, method_select
         # double check with feasibility returned from other level
         feasible_check = np.append(feasible_check, feasible_flag)
 
-
         # adding new xu yu to training
         train_x_u = np.vstack((train_x_u, searched_xu))
         complete_x_u = np.vstack((complete_x_u, new_complete_xu))
         complete_y_u = np.vstack((complete_y_u, new_complete_yu))
         if target_problem_u.n_constr > 0:
             complete_c_u = np.vstack((complete_c_u, new_complete_cu))
+
         # after adding new sample
         # follow an adjust on feasibility
         complete_y_u = \
@@ -1574,7 +1574,6 @@ def main_bi_mo(seed_index, target_problem, enable_crossvalidation, method_select
 
         # parameter for upper level local search
         n_before_ls = complete_x_u.shape[0] - 1  # at this stage, new variable is added
-
 
         if i > stop-number_of_initial_samples-1:
             break
@@ -1591,7 +1590,6 @@ def main_bi_mo(seed_index, target_problem, enable_crossvalidation, method_select
                                        num_gen,
                                        method_selection,
                                        enable_crossvalidation)
-
 
         # record convergence
         converge_track.append(np.min(complete_y_u))

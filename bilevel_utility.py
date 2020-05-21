@@ -205,7 +205,7 @@ def search_for_matching_otherlevel_x(x_other, search_iter, n_samples, problem, l
 
     # conduct local search with true evaluation
     localsearch_x, localsearch_f, n_fev, _, _, _, _ = \
-        localsearch_on_trueEvaluation(best_x, 250, level, x_other, problem, None, None, None, None)
+        localsearch_on_trueEvaluation(best_x, 100, level, x_other, problem, None, None, None, None)
     n_fev = n_fev + search_iter + n_samples
 
     # print('local search %s level, before %.4f, after %.4f' % (level, best_y, localsearch_f))
@@ -281,7 +281,7 @@ def localsearch_for_matching_otherlevel_x(x_other, max_eval, search_level, probl
     start_x = problem.xl + start_x * np.fabs(problem.xu - problem.xl)
     x_other = np.atleast_2d(x_other)
     start_x = np.atleast_2d(start_x)
-    localsearch_x, f, nfev = localsearch_on_trueEvaluation(start_x, max_eval, search_level, x_other, problem)
+    localsearch_x, f, nfev, _, _, _, _ = localsearch_on_trueEvaluation(start_x, max_eval, search_level, x_other, problem)
     localsearch_x = np.atleast_2d(localsearch_x)
 
     return localsearch_x, f, nfev, None, None
@@ -408,7 +408,7 @@ def hybridsearch_on_trueEvaluation(ankor_x, level, other_x, true_problem, ea_pop
         # print('EA returns feasible solutions')
 
     best_x, best_f, nfev, _, _, _, _ = \
-        localsearch_on_trueEvaluation(best_x, 1000, "lower", other_x, true_problem,
+        localsearch_on_trueEvaluation(best_x, 250, "lower", other_x, true_problem,
                                       None, None, None, None)
     nfev = nfev + ea_pop * ea_gen
 
