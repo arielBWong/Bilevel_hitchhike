@@ -14,6 +14,7 @@ import os
 import json
 import copy
 import joblib
+import multiprocessing as mp
 
 
 
@@ -36,7 +37,7 @@ def reverse_with_zscore(a, mean, std):
 def init_xy(number_of_initial_samples, target_problem, seed, **kwargs):
 
     n_vals = target_problem.n_var
-    if len(kwargs) > 0: # bilevel
+    if len(kwargs) > 0:  # bilevel
         n_vals = target_problem.n_levelvar
     n_sur_cons = target_problem.n_constr
 
@@ -119,16 +120,20 @@ def feasibility_adjustment_3_dynamic(combine_y, feasibility):
     infeasible_index = infeasible_index.ravel()
     feasible_index = feasible_index.ravel()
 
-    max_y = np.max(combine_y[feasible_index, :]) * 1.2
-
-    # use current max feasible f value as infeasible punishment value
-    combine_y[infeasible_index, :] = max_y
+    if len(infeasible_index) > 0:
+        max_y = np.max(combine_y[feasible_index, :]) * 1.2
+        print('infeasible xl cause fu value adjustment: %4.4f' % max_y)
+        # use current max feasible f value as infeasible punishment value
+        combine_y[infeasible_index, :] = max_y
+    else:
+        print('all xl feasible, no need to modify')
 
     return combine_y
 
 
 def search_for_matching_otherlevel_x(x_other, search_iter, n_samples, problem, level, eim, eim_pop, eim_gen,  seed_index, enable_crossvalidation, method_selection, **kwargs):
 
+    np.set_printoptions(precision=16)
     # for testing SMD problem;
     D = problem.n_levelvar
     n_samples = 11 * D - 1
@@ -187,15 +192,20 @@ def search_for_matching_otherlevel_x(x_other, search_iter, n_samples, problem, l
         # print('constr process')
         complete_y_feasible, train_x_feasible = return_feasible(complete_c, complete_y, train_x)
         if len(complete_y_feasible) > 0:
+            print('lower ego success to find feasible xl/fl for local search starting point is:')
             complete_y = complete_y_feasible
             train_x = train_x_feasible
             best_y_index = np.argmin(complete_y)
             best_x = train_x[best_y_index, :]
             best_x = np.atleast_2d(best_x)
             best_y = np.min(complete_y)
+            print(best_x)
+            print(best_y)
         else:
-            # print("no feasible found while ego on searching matching x")
+            print("lower ego fail to find feasible, local search start with x: ")
             best_x, best_y = nofeasible_select(complete_c, complete_y, train_x)
+            print(best_x)
+
             # print("before local search, closest best y: %.4f" % best_y)
     else:
         best_y_index = np.argmin(complete_y)
@@ -204,9 +214,37 @@ def search_for_matching_otherlevel_x(x_other, search_iter, n_samples, problem, l
         best_y = np.min(complete_y)
 
     # conduct local search with true evaluation
-    localsearch_x, localsearch_f, n_fev, _, _, _, _ = \
+    print('from matching search...returned local search')
+    print('adding preprocessing, if starting point is too close to  bound move inwards...')
+    best_x = boundary_closeness_check(best_x, problem.xu, problem.xl)
+
+
+    localsearch_x, localsearch_f, success, n_fev, _, _, _, _ = \
         localsearch_on_trueEvaluation(best_x, 100, level, x_other, problem, None, None, None, None)
     n_fev = n_fev + search_iter + n_samples
+    # print('local search success is : ')
+    # print(success)
+
+
+
+    if len(complete_y_feasible) > 0 and not success:
+        best_x = boundary_closeness_check(best_x, problem.xu, problem.xl)
+        localsearch_x, localsearch_f, success, n_fev, _, _, _, _ = \
+            localsearch_on_trueEvaluation(best_x, 100, level, x_other, problem, None, None, None, None)
+        n_fev = n_fev + search_iter + n_samples
+        print('adjusted xl start, local search status')
+        print(success)
+    if not success:
+        print('not success, startx, endx, endf')
+        print(best_x)
+        print(localsearch_x)
+        print(localsearch_f)
+
+
+
+    # print('fl is ')
+    # print(localsearch_f)
+    # print('\n')
 
     # print('local search %s level, before %.4f, after %.4f' % (level, best_y, localsearch_f))
     # print('local search found lx')
@@ -271,6 +309,20 @@ def search_for_matching_otherlevel_x(x_other, search_iter, n_samples, problem, l
     return return_tuple[0], return_tuple[1], return_tuple[2], return_tuple[3]
 
 
+def boundary_closeness_check(x, bound_u, bound_l):
+    # this function checks with whether x is too close to bounds
+    # if any of them is too close to boundaries, then change them a bit
+    # further away from boundary
+    # criterion is what ?
+    x = check_array(x)
+    upper_dist = np.abs(bound_u - x).ravel()
+    up_ind = np.argwhere(upper_dist < 0.1).ravel()
+    x[0, up_ind] = x[0, up_ind] - 0.1
+    lower_dist = np.abs(x - bound_l).ravel()
+    lower_ind = np.argwhere(lower_dist < 0.1).ravel()
+    x[0, lower_ind] = x[0, lower_ind] + 0.1
+
+    return x
 
 
 
@@ -281,7 +333,7 @@ def localsearch_for_matching_otherlevel_x(x_other, max_eval, search_level, probl
     start_x = problem.xl + start_x * np.fabs(problem.xu - problem.xl)
     x_other = np.atleast_2d(x_other)
     start_x = np.atleast_2d(start_x)
-    localsearch_x, f, nfev, _, _, _, _ = localsearch_on_trueEvaluation(start_x, max_eval, search_level, x_other, problem)
+    localsearch_x, f,_, nfev, _, _, _, _ = localsearch_on_trueEvaluation(start_x, max_eval, search_level, x_other, problem)
     localsearch_x = np.atleast_2d(localsearch_x)
 
     return localsearch_x, f, nfev, None, None
@@ -358,9 +410,10 @@ def hybridsearch_on_trueEvaluation(ankor_x, level, other_x, true_problem, ea_pop
 
     if ankor_x is not None:
         f, g = true_problem.evaluate(np.atleast_2d(np.hstack((other_x, ankor_x))), return_values_of=['F', 'G'])
-        print('fl value is: %.4f' % f)
+        print('before revaluation fl value is: %.4f' % f)
         print('cons value is ')
         print(g)
+        print('\n')
 
     # call for global evaluation
     '''
@@ -397,32 +450,36 @@ def hybridsearch_on_trueEvaluation(ankor_x, level, other_x, true_problem, ea_pop
     # check feasibility
     best_x = np.atleast_2d(best_x)
 
-    # f, c = true_problem.evaluate(np.hstack((other_x, best_x)), return_values_of=['F', 'G'])
-    # print('after EA true evaluation: ')
-    # print('fl value is: %.4f' % f)
-    # print('cons value is ')
-    # print(c)
-    # if np.any(c > 0):
-        # print('EA returns infeasible ')
-    # else:
-        # print('EA returns feasible solutions')
+    f, c = true_problem.evaluate(np.hstack((other_x, best_x)), return_values_of=['F', 'G'])
+    print('after EA true evaluation: ')
+    print('fl value is: %.4f' % f)
+    print('cons value is ')
+    print(c)
+    if np.any(c > 0):
+        print('EA returns infeasible ')
+    else:
+        print('EA returns feasible solutions')
 
-    best_x, best_f, nfev, _, _, _, _ = \
+    best_x, best_f, _, nfev, _, _, _, _ = \
         localsearch_on_trueEvaluation(best_x, 250, "lower", other_x, true_problem,
                                       None, None, None, None)
     nfev = nfev + ea_pop * ea_gen
 
     best_x = np.atleast_2d(best_x)
+    other_x = np.atleast_2d(other_x)
 
     f, c = true_problem.evaluate(np.hstack((other_x, best_x)),  return_values_of=['F', 'G'])
-    # print('after local search true evaluation: ')
-    # print('fl value is: %.4f' % f)
-    # print('cons value is ')
-    # print(c)
+    print('after local search true evaluation: ')
+    print('fl value is: %.4f' % f)
+    print('cons value is ')
+    print(c)
+    final_x = np.hstack((other_x, best_x))
+    print('final_x')
+    print(final_x)
 
     flag = True
     if true_problem.n_constr > 0:
-        c[np.abs(c) < 1e-10] = 0
+        c[np.abs(c) <= 1e-6] = 0
         if np.any(c > 0):
             flag = False
 
@@ -438,6 +495,8 @@ def ankor_selection(data_x, data_y, data_c, target_problem):
         x_feas = np.atleast_2d(x_feas).reshape(-1, target_problem.n_var)
         if len(y_feas) > 0:  # deal with feasible solutions
             # identify best feasible solution
+            z = len(y_feas)
+            print('after ankor selection, %d points left' % z)
             min_fu_index = np.argmin(y_feas)
             best_y = np.min(y_feas)
             # extract xu
@@ -460,10 +519,14 @@ def ankor_selection(data_x, data_y, data_c, target_problem):
 def bilevel_localsearch(target_problem_u, complete_x_u, complete_y_u, complete_c_u, feasible_check, **bi_para):
     # this method is designed to include steps of running a local search on upper level varible
     # it selects the current best xu, and run a local search from this xu
-    best_xu, _ = ankor_selection(complete_x_u, complete_y_u, complete_c_u, target_problem_u)
+    best_xu, best_fu = ankor_selection(complete_x_u, complete_y_u, complete_c_u, target_problem_u)
     best_xu_sofar = np.atleast_2d(best_xu)
+    print('starting point')
+    print(best_xu)
+    print('starting fu')
+    print(best_fu)
 
-    new_xu, new_fu, n_fev_local, feasible_check, complete_x_u, complete_y_u, complete_c_u = \
+    new_xu, new_fu, success, n_fev_local, feasible_check, complete_x_u, complete_y_u, complete_c_u = \
         localsearch_on_trueEvaluation(best_xu_sofar,
                                       10,
                                       'upper',
@@ -474,6 +537,10 @@ def bilevel_localsearch(target_problem_u, complete_x_u, complete_y_u, complete_c
                                       complete_c_u,
                                       feasible_check,
                                       **bi_para)
+    print('end point is :')
+    print(new_xu)
+    print('end point fu is: ')
+    print(new_fu)
     return new_xu, n_fev_local, feasible_check, complete_x_u, complete_y_u, complete_c_u
 
 def localsearch_on_trueEvaluation(ankor_x, max_eval, level_s, other_x, true_problem,
@@ -488,6 +555,7 @@ def localsearch_on_trueEvaluation(ankor_x, max_eval, level_s, other_x, true_prob
         other_x = np.atleast_2d(other_x)
     bi_matching_x = None
     up_evalcount = 0
+
 
     def obj_func(x):
         nonlocal feasible_check
@@ -504,7 +572,17 @@ def localsearch_on_trueEvaluation(ankor_x, max_eval, level_s, other_x, true_prob
                 x = np.hstack((other_x, x))
             else:
                 x = np.hstack((x, other_x))
-            return true_problem.evaluate(x,  return_values_of=["F"])
+            f = true_problem.evaluate(x,  return_values_of=["F"])
+
+            if other_x is not None:
+                print('\n Single level  calculate obj')
+                print('Single fu')
+                print(f)
+                print('single x')
+                print(x)
+
+
+            return f
         else:  # indicate a local search on upper level/bilevel optimization wrapper
             # the local search optimization framework seems calculate constraint first, so
             # should wait for contraint update the xl
@@ -541,6 +619,16 @@ def localsearch_on_trueEvaluation(ankor_x, max_eval, level_s, other_x, true_prob
                 #  n = complete_x_u.shape[0]
                 # print('local search changing check: %d'% n)
                 # print('return f: %d' % f)
+
+            if other_x is None:
+
+                print('\n bilevel calculate obj')
+                print('bilevel each fu')
+                print(f)
+                print('bilevel xu')
+                print(x)
+                print('\n')
+
             return f
 
     def cons_func(x):
@@ -562,7 +650,8 @@ def localsearch_on_trueEvaluation(ankor_x, max_eval, level_s, other_x, true_prob
 
             constr = true_problem.evaluate(x, return_values_of=["G"])
         else:  # deal with bi-level local search condition
-
+            print('bilevel wrapper lower matching search for xu:')
+            print(x)
             matching_xl, matching_fl, n_fev_local, feasible_flag = \
                 search_for_matching_otherlevel_x(x, **bi_para)
             up_evalcount = up_evalcount + n_fev_local
@@ -572,6 +661,7 @@ def localsearch_on_trueEvaluation(ankor_x, max_eval, level_s, other_x, true_prob
             x = np.hstack((x, bi_matching_x))
 
             F, constr = true_problem.evaluate(x, return_values_of=["F", "G"])
+
 
             # if lower level return infeasible solution xl
             # f value of upper level needs to be changed to penalty values
@@ -585,14 +675,30 @@ def localsearch_on_trueEvaluation(ankor_x, max_eval, level_s, other_x, true_prob
             if feasible_flag is False:
                 complete_y_u = feasibility_adjustment_3_dynamic(complete_y_u, feasible_check)
 
+
+        if other_x is None:
+            print('bilevel local search on contraints')
+            print(constr)
+            print('from x combo:')
+            print(x)
+            print('\n')
+        if other_x is not None:
+            print('\n single level local search on contraints:')
+            print(constr)
+            print('from x combo:')
+            print(x)
+
         constr = constr * -1
         return constr.ravel()
 
-
+    if other_x is None:
+        ipr = 2
+    else:
+        ipr = 1
     bounds = scipy.optimize.Bounds(lb=true_problem.xl, ub=true_problem.xu)
     if true_problem.n_constr > 0:
         optimization_res = scipy.optimize.minimize(
-            obj_func, ankor_x, method="SLSQP", options={'maxiter': max_eval},
+            obj_func, ankor_x, method="SLSQP", options={'maxiter': max_eval, 'iprint': 2},  # 'disp': True},
             constraints={'type': 'ineq', 'fun': cons_func}, jac=False, bounds=bounds)
     else:
         optimization_res = scipy.optimize.minimize(
@@ -601,8 +707,15 @@ def localsearch_on_trueEvaluation(ankor_x, max_eval, level_s, other_x, true_prob
 
     # print('number of function evaluations: %d '% optimization_res.nfev)
 
-    x, f, num_fev = optimization_res.x, optimization_res.fun, optimization_res.nfev
-    return x, f, num_fev + up_evalcount, feasible_check, complete_x_u, complete_y_u, complete_c_u
+    x, f, num_fev, success = optimization_res.x, optimization_res.fun, optimization_res.nfev, optimization_res.success
+    if other_x is None:
+        print('\n bilevel returned results')
+        print(optimization_res)
+    else:
+        print('single level local search result')
+        print(optimization_res)
+
+    return x, f, success, num_fev + up_evalcount,  feasible_check, complete_x_u, complete_y_u, complete_c_u
 
 def nofeasible_select(constr_c, train_y, train_x):
 
@@ -625,7 +738,12 @@ def return_feasible(solutions_c_orig, solutions_y, solution_x):
     return solutions_y[feasible, :], solution_x[feasible, :]
 
 
-def surrogate_search_for_nextx(train_x, train_y, train_c, eim, eim_pop, eim_gen, method_selection, enable_crossvalidation):
+def surrogate_search_for_nextx(train_x_orig, train_y_orig, train_c_orig, eim, eim_pop, eim_gen, method_selection, enable_crossvalidation):
+
+    train_x, train_y, train_c = close_point_elimination(train_x_orig, train_y_orig, train_c_orig, 2)
+    # train_x = train_x_orig
+    # train_y = train_y_orig
+    # train_c = train_c_orig
     train_x_norm, x_mean, x_std = norm_by_zscore(train_x)
     train_y_norm, y_mean, y_std = norm_by_zscore(train_y)
 
@@ -812,16 +930,22 @@ def saveKRGmodel(krg, krg_g, folder, problem_u, seed_index):
     krgmodel_save = result_folder + '\\krg_g_' + str(seed_index) + '.joblib'
     joblib.dump(krg_g, krgmodel_save)
 
-def trained_model_prediction(krg, train_x, train_y, test_x):
+def trained_model_prediction(krg, train_x, train_y, test_x, n_var):
     # this function is a reusable one
     # for using a trained kriging to
     # predict test data
+    # train_x, train_y, _ = close_point_elimination(train_x_org, train_y_org, None)
+    # n = train_x.shape[0]
+    # print('after rebuild number of data: %d' % n)
+    # just for test
+    # train_x = train_x_org
+    # train_y = train_y_org
 
     # find mean and std for prediction
     train_x_norm, x_mean, x_std = norm_by_zscore(train_x)
     train_y_norm, y_mean, y_std = norm_by_zscore(train_y)
 
-    test_x = np.atleast_2d(test_x).reshape(-1, 1)
+    test_x = np.atleast_2d(test_x).reshape(-1, n_var)
     test_x_norm = norm_by_exist_zscore(test_x, x_mean, x_std)
     pred_y_norm, pred_y_sig_norm = krg.predict(test_x_norm)
     pred_y = reverse_with_zscore(pred_y_norm, y_mean, y_std)
@@ -962,12 +1086,25 @@ def upper_y_from_exghaustive_search(problem_l, problem_u, xu_list, vio_value):
         if flag is False:
             if vio_value is not None:
                 fu_i = vio_value
-                vio_list = np.append(vio_list, False)
-            # print('False lower')
+            else:
+                fu_i = 1000
+            vio_list = np.append(vio_list, False)
+            print('False lower')
         else:
             vio_list = np.append(vio_list, True)
         fu = np.append(fu, fu_i)
 
+
+    if vio_value is None:
+        vio_list_False = np.argwhere(vio_list == 0).flatten()
+        vio_list_True = np.argwhere(vio_list > 0).flatten()
+        vio_list_True = [int(c) for c in vio_list_True]
+        vio_list_False = [int(c) for c in vio_list_False]
+
+        fu_True_max = np.max(fu[vio_list_True])
+        fu[vio_list_False] = fu_True_max*1.2
+
+    fu = np.atleast_2d(fu).reshape(-1, problem_u.n_obj)
     xl = np.atleast_2d(xl).reshape(-1, problem_l.n_levelvar)
     return fu, xl, vio_list
 
@@ -1021,12 +1158,13 @@ def rebuild_surrogate_and_plot():
     folder ='bi_output'
     n = len(target_problems)
     # seedlist = [2, 0, 5, 8, 1, 6, 5, 6, 5, 6, 9]   # median seeds from no sample in infeasible regions
-    seedlist = [2, 0, 5, 1, 8, 6, 5, 6, 4, 1, 9]    # median seeds from dynamic values from infeasible regions
-    seed_index = 10
-    # seed_index = 0
+    # seedlist = [2, 0, 5, 1, 8, 6, 5, 6, 4, 1, 9]    # median seeds from dynamic values from infeasible regions
+    seedlist = [4, 3, 4, 4]
+    # seed_index = 10
+    seed_index = 0
 
-    # for i in range(0, n, 2):
-    for i in range(0, 2, 2):
+    for i in range(0, n, 2):
+    # for i in range(0, 2, 2):
     # for i in range(8, 10, 2):  # only test problem 5
         problem_u = eval(target_problems[i])
         problem_l = eval(target_problems[i+1])
@@ -1035,9 +1173,9 @@ def rebuild_surrogate_and_plot():
         print(problem_u.name())
 
         # this plot only works with single upper level  variable problems
-        if problem_u.n_levelvar > 1:
-            seed_index = seed_index + 1
-            continue
+        # if problem_u.n_levelvar > 1:
+        #     seed_index = seed_index + 1
+        #     continue
 
         # load the krg and train sample of each problem
         problem = problem_u.name()[0:-2]
@@ -1067,7 +1205,7 @@ def rebuild_surrogate_and_plot():
         y_up = np.loadtxt(traindata_file, delimiter=',')
 
         # extract upper level variable
-        train_x = np.atleast_2d(x_both[:, 0:problem_u.n_levelvar]).reshape(-1, problem_u.p)
+        train_x = np.atleast_2d(x_both[:, 0:problem_u.n_levelvar]).reshape(-1, problem_u.n_levelvar)
         train_y = np.atleast_2d(y_up).reshape(-1, 1)
 
         # plot_sample_order(train_x, train_y, problem_u, seed)
@@ -1126,23 +1264,92 @@ def rebuild_surrogate_and_plot():
         # comment the following function, if only want to save test data
         ego_basic_train_predict(krg[0], krg_g, train_x, train_y, train_c, testdata, testdata_y, infeasible, problem_u, folder)
 
-def SMD_invest(problem_u, problem_l, vio_setting):
-    # this function aims to form the plot
-    # compare lower f of exghausive search and surrogate search
-    #
 
-    # create test data from variable bounds
-    # testdata = np.linspace(problem_u.xl, problem_u.xu, 1000)
-    testdata, _, _ = init_xy(1000, problem_u, 0, **{'problem_type': 'bilevel'})
-    # testdata_y, xl, vio_list = upper_y_from_exghaustive_search(problem_l, problem_u, testdata, vio_setting)
+def SMD_invest_retrieve_vio(problem_u, folder, seed):
+    problem = problem_u.name()[0:-2]
+    working_folder = os.getcwd()
 
+    result_folder = working_folder + '\\' + folder + '\\' + problem + '_sampleddata'
+    traindata_file = result_folder + '\\sampled_data_x_' + str(seed) + '.csv'
+    print(traindata_file)
+    x_both = np.loadtxt(traindata_file, delimiter=',')
+    traindata_file = result_folder + '\\sampled_data_y_' + str(seed) + '.csv'
+    print(traindata_file)
+    y_up = np.loadtxt(traindata_file, delimiter=',')
+
+    # extract upper level variable
+    train_x = np.atleast_2d(x_both[:, 0:problem_u.n_levelvar]).reshape(-1, problem_u.n_levelvar)
+    train_y = np.atleast_2d(y_up).reshape(-1, 1)
+
+
+    # because of saving sequence problem, the last one needs to be deleted
+    # as it cannot be counted into training, otherwise, the mean for
+    # building prediction will be affected.
+    m = train_x.shape[0]
+    train_x = np.delete(train_x, m - 1, axis=0)
+    train_y = np.delete(train_y, m - 1, axis=0)
+
+    # identify the violation value is set to what
+    feasiflag_save = result_folder + '\\sampled_ll_feasi_' + str(seed) + '.joblib'
+    print(feasiflag_save)
+    feasible_flag = joblib.load(feasiflag_save)
+    feasible_flag = feasible_flag[0:-1]
+    vio_list = np.argwhere(feasible_flag == False)
+    if len(vio_list) > 0:
+        vio_setting = train_y[vio_list[0], :]
+    else:
+        vio_setting = None
+    return vio_setting
+
+
+def test_data_parall(testdata,problem_u, problem_l, result_folder, seed, vio_setting):
+    # this function split test data into 10 groups and run parallel
+    # and only deal with 1000 instances
+
+    args = []
+    n = testdata.shape[0]
+    n_var = testdata.shape[1]
+    m = 10
+    batch = 100
+    for i in range(m):
+        head = i * batch
+        tail = (i+1) * batch
+        eachdata = np.atleast_2d(testdata[head:tail, 0: n_var]).reshape(-1, n_var)
+        args.append((i, eachdata, problem_u, problem_l, result_folder, seed, vio_setting))
+    return args
+
+def parallelsave_combine(problem_u, seed, batch_max):
+    problem = problem_u.name()[0:-2]
+    working_folder = os.getcwd()
+    folder = 'bi_output'
+
+
+    result_folder = working_folder + '\\' + folder + '\\real_function'
+    out = [0] * (problem_u.n_var + 2)
+    out = np.atleast_2d(out)
+    for i in range(batch_max):
+        savefile = result_folder + '\\' + problem + \
+               '_testdate_sur_seed_' + str(seed) + '_' + str(i) + '.joblib'
+        data = joblib.load(savefile)
+        out = np.vstack((out, data))
+
+    out = np.delete(out, 0, axis=0)
+    return out
+
+
+def surrogate_react_2_testdata(batch, data, problem_u, problem_l, result_folder, seed, infea):
+    problem = problem_u.name()[0:-2]
+    # create surrogat
     eim_l = EI.EIM(problem_l.n_levelvar, n_obj=1, n_constr=0,
                    upper_bound=problem_l.xu,
                    lower_bound=problem_l.xl)
     xl = []
     fl = []
-    for i in range(1000):
-        xu = np.atleast_2d(testdata[i, :])
+    feasible_list = []
+    n = data.shape[0]
+    for i in range(n):
+        print(i)
+        xu = np.atleast_2d(data[i, :])
         matching_x, matching_f, n_fev_local, feasible_flag = \
             search_for_matching_otherlevel_x(xu,
                                              30,
@@ -1157,6 +1364,89 @@ def SMD_invest(problem_u, problem_l, vio_setting):
                                              'eim')
         xl = np.append(xl, matching_x)
         fl = np.append(fl, matching_f)
+        feasible_list = np.append(feasible_list, feasible_flag)
+
+    xl = np.atleast_2d(xl).reshape(-1, problem_l.n_levelvar)
+    fl = np.atleast_2d(fl).reshape(-1, problem_l.n_obj)
+
+    data = np.atleast_2d(data)
+    x_comb = np.hstack((data, xl))
+    fu = problem_u.evaluate(x_comb, return_values_of=['F'])
+    infesi_index = np.where(feasible_list == 0)[0]
+    if infea is not None:
+        fu[infesi_index, :] = infea
+    else:
+        fu[infesi_index, :] = 1000
+
+
+
+    savefile = result_folder + '\\' + problem + \
+               '_testdate_sur_seed_' + str(seed) + '_' + str(batch) + '.joblib'
+    save_test = np.hstack((data, xl, fu, fl))
+    joblib.dump(save_test, savefile)
+
+
+def SMD_invest(problem_u, problem_l, vio_setting, seed):
+    # this function aims to form the plot
+    # compare lower f of exghausive search and surrogate search
+    #
+
+    problem = problem_u.name()[0:-2]
+    working_folder = os.getcwd()
+    folder = 'bi_output'
+
+
+    # save these test data
+    result_folder = working_folder + '\\' + folder + '\\real_function'
+    if not os.path.isdir(result_folder):
+        os.mkdir(result_folder)
+
+    vio_setting = SMD_invest_retrieve_vio(problem_u, 'bi_output', 0)
+
+    # create test data from variable bounds
+    # testdata = np.linspace(problem_u.xl, problem_u.xu, 1000)
+    testdata, _, _ = init_xy(1000, problem_u, 0, **{'problem_type': 'bilevel'})
+    a = 0
+
+    testdata_y, xl, vio_list = upper_y_from_exghaustive_search(problem_l, problem_u, testdata, vio_setting)
+
+    savefile = result_folder + '\\' + problem + '_testdate_exh_seed_' + str(seed) + '.csv'
+
+    testdata = np.atleast_2d(testdata).reshape(-1, problem_u.n_levelvar)
+    testdata_y = np.atleast_2d(testdata_y).reshape(-1, problem_u.n_obj)
+    save_test = np.hstack((testdata, xl, testdata_y))  # save both level variables
+    np.savetxt(savefile, save_test, delimiter=',')
+
+    '''
+
+
+    # create surrogat
+    eim_l = EI.EIM(problem_l.n_levelvar, n_obj=1, n_constr=0,
+                   upper_bound=problem_l.xu,
+                   lower_bound=problem_l.xl)
+    xl = []
+    fl = []
+
+    # let us parallel it
+    for i in range(10):
+        print(i)
+        xu = np.atleast_2d(testdata[i, :])
+        matching_x, matching_f, n_fev_local, feasible_flag = \
+            search_for_matching_otherlevel_x(xu,
+                                             30,
+                                             20,
+                                             problem_l,
+                                             'lower',
+                                             eim_l,
+                                             100,
+                                             100,
+                                             0,
+                                             False,
+                                             'eim')
+
+
+        xl = np.append(xl, matching_x)
+        fl = np.append(fl, matching_f)
     xl = np.atleast_2d(xl).reshape(-1, problem_l.n_levelvar)
     fl = np.atleast_2d(fl).reshape(-1, problem_l.n_obj)
     testdata = np.atleast_2d(testdata)
@@ -1164,52 +1454,128 @@ def SMD_invest(problem_u, problem_l, vio_setting):
     testdata_y = problem_u.evaluate(x_comb, return_values_of=['F'])
 
 
+    savefile = result_folder + '\\' + problem + '_testdate_sur_seed_' + str(seed) + '.csv'
+    testdata = np.atleast_2d(testdata).reshape(-1, problem_u.n_levelvar)
+    testdata_y = np.atleast_2d(testdata_y).reshape(-1, problem_u.n_obj)
 
+    save_test = np.hstack((testdata, xl, testdata_y, fl))
 
+    np.savetxt(savefile, save_test, delimiter=',')
+     '''
 
+def meshgrid_distribute_data():
+    print('to be continued')
 
+def invest_SMD_one_instance(problem_u, problem_l, index, seed):
+    # this function check the lower level search for designated problem
+    # and seed
 
     problem = problem_u.name()[0:-2]
     working_folder = os.getcwd()
     folder = 'bi_output'
-    seed = 0
-
-    # save these test data
-    result_folder = working_folder + '\\' + folder + '\\real_function'
-    if not os.path.isdir(result_folder):
-        os.mkdir(result_folder)
-
-    #savefile = result_folder + '\\' + problem + '_testdate_gen_seed_' + str(seed) + '.csv'
-    savefile = result_folder + '\\' + problem + '_testdate_sur_seed_' + str(seed) + '.csv'
-    testdata = np.atleast_2d(testdata).reshape(-1, problem_u.n_levelvar)
-    testdata_y = np.atleast_2d(testdata_y).reshape(-1, problem_u.n_obj)
-    # save_test = np.hstack((testdata, xl, testdata_y))  # save both level variables
-    save_test = np.hstack((testdata, xl, testdata_y, fl))
-
-    np.savetxt(savefile, save_test, delimiter=',')
 
 
-    # ax3 = fig.add_subplot(223)
-    # ax2 = fig.add_subplot(222)
-    # ax4 = fig.add_subplot(224)
+    # In order to plot the test data, we need the training data of krg
+    result_folder = working_folder + '\\' + folder + '\\' + problem + '_sampleddata'
+    traindata_file = result_folder + '\\sampled_data_x_' + str(seed) + '.csv'
+    print(traindata_file)
+    x_both = np.loadtxt(traindata_file, delimiter=',')
+    traindata_file = result_folder + '\\sampled_data_y_' + str(seed) + '.csv'
+    print(traindata_file)
+    y_up = np.loadtxt(traindata_file, delimiter=',')
 
-def SMD_invest_visualisation(problem_u, problem_l):
+    xu = np.atleast_2d(x_both[index, 0:problem_u.n_levelvar])
+    x_combo = np.atleast_2d(x_both[index, 0:problem_u.n_var])
+    xl = np.atleast_2d(x_both[index, problem_u.n_levelvar:problem_u.n_var])
+    xl[0, 0] = xl[0, 0] + 0.01
+    xl[0, 1] = xl[0, 1] + 0.01
+    xl[0, 2] = xl[0, 2] - 0.01
+    # for test purpose
+    # xl = np.atleast_2d(x_both[index, [problem_u.n_levelvar, problem_u.n_var-1]])
+    y_sample = np.atleast_2d(y_up[index])
+
+    fl, lc = problem_l.evaluate(x_combo, return_values_of=['F','G'])
+    print(fl)
+    print(lc)
+
+    # conduct local search with true evaluation
+    localsearch_x, localsearch_f,_, n_fev, _, _, _, _ = \
+        localsearch_on_trueEvaluation(xl, 100, 'lower', xu, problem_l, None, None, None, None)
+
+    a = 0
+
+    # let's plot the feasible and infeasible regions
+    k = 1000
+    test_data, _, _ = init_xy(k, problem_l, 0, **{'problem_type': 'bielvel'})
+    test_combo = np.repeat(xu, k, axis=0)
+    test_combo = np.hstack((test_combo, test_data))
+    test_cc = problem_l.evaluate(test_combo, return_values_of=['G'])
+
+    test_cc[np.abs(test_cc) < 1e-6] = 0
+    test_c = copy.deepcopy(test_cc)
+
+    test_c[test_c<=0] = 0
+    test_c_cv = np.sum(test_c, axis=1)
+    test_c_cv = test_c_cv.ravel()
+    infeasible = np.nonzero(test_c_cv)
+    a = np.linspace(0, k-1, k)
+    feasible = np.setdiff1d(a, infeasible)
+    infeasible = [int(b) for b in infeasible[0]]
+    feasible = [int(b) for b in feasible]
+
+    fig = plt.figure()
+    # ------------------------------------------
+    # plot upper level fu with exhausive search
+    ax1 = fig.add_subplot(111)
+
+    ax1.scatter(test_cc[infeasible, 0], test_cc[infeasible, 1], c='k')
+    ax1.scatter(test_cc[feasible, 0], test_cc[feasible, 1], c='g')
+    ax1.scatter(lc[0,0], lc[0, 1], marker='X',c='r')
+    plt.show()
+    a = 0
+
+    '''
+    eim_l = EI.EIM(problem_l.n_levelvar, n_obj=1, n_constr=0,
+                   upper_bound=problem_l.xu,
+                   lower_bound=problem_l.xl)
+
+    matching_x, matching_f, n_fev_local, feasible_flag = \
+        search_for_matching_otherlevel_x(xu,
+                                         30,
+                                         32,
+                                         problem_l,
+                                         'lower',
+                                         eim_l,
+                                         100,
+                                         100,
+                                         0, False, 'eim')
+
+    testdata_y, xl, vio_list = upper_y_from_exghaustive_search(problem_l, problem_u, xu, 1000)
+
+
+    print(testdata_y)
+    a = 0
+    '''
+
+
+
+def SMD_invest_visualisation(problem_u, problem_l, seed):
     # this method is only a consequent
     # visualization method SMD_invest
     # only after the above method generates data
     # this method can be used
+    from mpl_toolkits.mplot3d import Axes3D
 
     problem = problem_u.name()[0:-2]
     working_folder = os.getcwd()
     folder = 'bi_output'
-    seed = 0
 
-    # save these test data
+
+
+    # (1) load exhausive search results
     result_folder = working_folder + '\\' + folder + '\\real_function'
-    if not os.path.isdir(result_folder):
-        os.mkdir(result_folder)
 
-    savefile = result_folder + '\\' + problem + '_testdate_gen_seed_' + str(seed) + '.csv'
+    savefile = result_folder + '\\' + problem + '_testdate_exh_seed_' + str(seed) + '.csv'
     testdata = np.loadtxt(savefile, delimiter=',')
     testdata_y = testdata[:, -1]
 
@@ -1218,19 +1584,66 @@ def SMD_invest_visualisation(problem_u, problem_l):
     fl = problem_l.evaluate(complete_x, return_values_of=['F'])
 
     # read surrogate model saved results
-    savefile = result_folder + '\\' + problem + '_testdate_sur_seed_' + str(seed) + '.csv'
-    surdata = np.loadtxt(savefile, delimiter=',')
+    surdata = np.atleast_2d([0] * 7)
+    for i in range(10):
+        savefile = result_folder + '\\' + problem + '_testdate_sur_seed_' +\
+                   str(seed) + '_' + str(i) + '.joblib'
+        batch = joblib.load(savefile)
+        surdata = np.vstack((surdata, batch))
+    surdata = np.delete(surdata, 0, axis=0)
     fl_sur = surdata[:, -1]
     fu_sur = surdata[:, -2]
 
     xu_sur = surdata[:, 0: problem_u.n_levelvar]
     xl_sur = surdata[:, problem_u.n_levelvar: problem_u.n_var]
 
-    #
+
+    # (2) create before local search
+    # surrgoate approximation surface
+    # with the above exhausive search data
+    result_folder = working_folder + '\\' + folder + '\\' + problem + '_krgmodels'
+    krgmodel_save = result_folder + '\\krg_' + str(seed) + '.joblib'
+    print(krgmodel_save)
+    krg = joblib.load(krgmodel_save)
+    krgmodel_save = result_folder + '\\krg_g_' + str(seed) + '.joblib'
+    print(krgmodel_save)
+    krg_g = joblib.load(krgmodel_save)
+
+    # In order to plot the test data, we need the training data of krg
+    result_folder = working_folder + '\\' + folder + '\\' + problem + '_sampleddata'
+    traindata_file = result_folder + '\\sampled_data_x_' + str(seed) + '.csv'
+    print(traindata_file)
+    x_both = np.loadtxt(traindata_file, delimiter=',')
+    traindata_file = result_folder + '\\sampled_data_y_' + str(seed) + '.csv'
+    print(traindata_file)
+    y_up = np.loadtxt(traindata_file, delimiter=',')
+
+    feasiflag_save = result_folder + '\\sampled_ll_feasi_' + str(seed) + '.joblib'
+    # print(feasiflag_save)
+    feasible_flag = joblib.load(feasiflag_save)
+
+    # extract upper level variable
+    train_size = 50
+    train_x = np.atleast_2d(x_both[0: train_size, 0:problem_u.n_levelvar]).reshape(-1, problem_u.n_levelvar)
+    train_y = np.atleast_2d(y_up[0: train_size]).reshape(-1, 1)
+    test_x = np.atleast_2d(testdata[:, 0:problem_u.n_levelvar])
+    pred_y = trained_model_prediction(krg[0], train_x, train_y, test_x, problem_u.n_levelvar)
+
+
+    # re-identify local search starting point
+    complete_x_u = np.atleast_2d(x_both[0: train_size, 0:problem_u.n_var])
+    complete_y_u = np.atleast_2d(y_up[0: train_size]).reshape(-1, 1)
+    complete_c_u = problem_u.evaluate(complete_x_u, return_values_of=["G"])
+    best_xu, ankor_f = ankor_selection(complete_x_u, complete_y_u, complete_c_u, problem_u)
+    ankor_xu = np.atleast_2d(best_xu)
+    last_xu = np.atleast_2d(x_both[-2, 0:problem_u.n_levelvar])
+    last_fu = np.atleast_2d(y_up[-2])
+
+    fig = plt.figure()
 
     range_fu = []
     range_fu = np.append(range_fu, testdata_y)
-    range_fu = np.append(range_fu, fu_sur)
+    # range_fu = np.append(range_fu, fu_sur)
     z_max = np.max(range_fu) + 1
     z_min = np.min(range_fu) - 1
 
@@ -1241,32 +1654,43 @@ def SMD_invest_visualisation(problem_u, problem_l):
     l_min = np.min(range_fu) - 1
     # the plot should have 4 subplots
     #
-    from mpl_toolkits.mplot3d import Axes3D
-    fig = plt.figure(figsize=(20, 20))
+
+    fig = plt.figure(figsize=(20, 25))
+    xu1_min = problem_u.xl[0]
+    xu1_max = problem_u.xu[0]
+
+    xu2_min = problem_u.xl[1]
+    xu2_max = problem_u.xu[1]
 
     # ------------------------------------------
     # plot upper level fu with exhausive search
-    ax1 = fig.add_subplot(221, projection='3d')
+    ax1 = fig.add_subplot(231, projection='3d')
     ax1.set_xlabel('xu1')
-    ax1.set_xlim([-5, 10])
+    ax1.set_xlim([xu1_min, xu1_max])
     ax1.set_ylabel('xu2')
-    ax1.set_ylim([-5, 1])
+    ax1.set_ylim([xu2_min, xu2_max])
     ax1.set_zlim([z_min, z_max])
     ax1.set_zlabel('fu')
+
     cm = plt.cm.get_cmap('RdYlBu')
     cl1 = ax1.scatter(testdata[:, 0], testdata[:, 1],
                       testdata_y.ravel(), c=testdata_y.ravel(),
                       cmap=cm, vmin=z_min, vmax=z_max)
+
+    ax1.scatter(ankor_xu[:, 0], ankor_xu[:, 1], ankor_f.ravel(), marker='X', c='k')
+    ax1.scatter(last_xu[:, 0], last_xu[:, 1], last_fu.ravel(), marker='X', c='g')
+
     ax1.set_title('fu with exhausive search')
     fig.colorbar(cl1, ax=ax1)
 
+
     # -------------------------------------------
     # plot lower level fl from exhausive search
-    ax2 = fig.add_subplot(223, projection='3d')
+    ax2 = fig.add_subplot(234, projection='3d')
     ax2.set_xlabel('xu1')
-    ax2.set_xlim([-5, 10])
+    ax2.set_xlim([xu1_min, xu1_max])
     ax2.set_ylabel('xu2')
-    ax2.set_ylim([-5, 1])
+    ax2.set_ylim([xu2_min, xu2_max])
     ax2.set_zlabel('fl')
     ax2.set_zlim([l_min, l_max])
     cl2 = ax2.scatter(testdata[:, 0], testdata[:, 1],
@@ -1278,26 +1702,27 @@ def SMD_invest_visualisation(problem_u, problem_l):
 
     # -----------------------------------------
     # plot upper level fu from surrogate results
-    ax3 = fig.add_subplot(222, projection='3d')
+    ax3 = fig.add_subplot(232, projection='3d')
     ax3.set_xlabel('xu1')
-    ax3.set_xlim([-5, 10])
+    ax3.set_xlim([xu1_min, xu1_max])
     ax3.set_ylabel('xu2')
-    ax3.set_ylim([-5, 1])
+    ax3.set_ylim([xu2_min, xu2_max])
     ax3.set_zlim([z_min, z_max])
     cl3 = ax3.scatter(xu_sur[:, 0], xu_sur[:, 1],
                       fu_sur, c=fu_sur,
                       cmap=cm, vmin=z_min, vmax=z_max)
+    ax3.scatter(ankor_xu[:, 0], ankor_xu[:, 1], ankor_f.ravel(), marker='X', c='k')
     ax3.set_title('fu with EGO hybrid search')
     fig.colorbar(cl3, ax=ax3)
 
 
     #-----------------------------------------
     # plot lower level fu from surrogate results
-    ax4 = fig.add_subplot(224, projection='3d')
+    ax4 = fig.add_subplot(235, projection='3d')
     ax4.set_xlabel('xu1')
-    ax4.set_xlim([-5, 10])
+    ax4.set_xlim([xu1_min, xu1_max])
     ax4.set_ylabel('xu2')
-    ax4.set_ylim([-5, 1])
+    ax4.set_ylim([xu2_min, xu2_max])
     ax4.set_zlim([l_min, l_max])
     cl4 = ax4.scatter(xu_sur[:, 0], xu_sur[:, 1],
                       fl_sur, c=fl_sur,
@@ -1305,17 +1730,317 @@ def SMD_invest_visualisation(problem_u, problem_l):
     ax4.set_title('fl with EGO hybrid search')
     fig.colorbar(cl4, ax=ax4)
 
+    # plot surrogate prediction by the end of the upper EGO
+    # ------------------------------------------
+    # plot upper level fu with exhausive search
+    ax5 = fig.add_subplot(233, projection='3d')
+    ax5.set_xlabel('xu1')
+    ax5.set_xlim([xu1_min, xu1_max])
+    ax5.set_ylabel('xu2')
+    ax5.set_ylim([xu2_min, xu2_max])
+    # ax5.set_zlim([z_min, z_max])
+    ax5.set_zlabel('fu')
+    cm = plt.cm.get_cmap('RdYlBu')
+    cl5 = ax5.scatter(test_x[:, 0], test_x[:, 1],
+                   pred_y.ravel(), c=pred_y.ravel(),
+                       cmap=cm)  #, vmin=l_min, vmax=l_max)
+    ax5.scatter(ankor_xu[:, 0], ankor_xu[:, 1], ankor_f.ravel(), marker='X', c='k')
+    ax5.scatter(last_xu[:, 0], last_xu[:, 1], last_fu.ravel(), marker='X', c='g')
+    ax5.scatter(train_x[:, 0], train_x[:, 1], train_y.ravel(), marker='X', c='k')
+    ax5.set_title('surrogate rebuild')
+    # fig.colorbar(cl5, ax=ax5)
+    start = '[' + "{:4.2f}".format(ankor_xu[:, 0][0]) + ', ' + "{:4.2f}".format(ankor_xu[:, 1][0]) + ']'
+    ax5.text(0, 0, z_max, start)
+    end = '[' + "{:4.2f}".format(last_xu[:, 0][0]) + ', ' + "{:4.2f}".format(last_xu[:, 1][0]) + ']'
+    ax5.text(0, 0, z_max-50, end)
 
 
 
+    plt.show()
+    plot_save = result_folder + '\\' + problem + '_llsearch_vis_' + str(seed) + '.png'
+    plt.savefig(plot_save,  format='png')
 
-    # plt.show()
-    plot_save= result_folder + '\\' + problem + '_llsearch_vis_' + str(seed) + '.png'
-    plt.savefig(plot_save)
+def SMD_investigate_kriging(problem_u, problem_l, seed):
+    # This method aims at investigate the performance of kriging
+    # (1) load train data and respond, isolate the kriging training, and predict 1000 sampled data
+    # (2) same train data, but use exhaustive search to get f, rebuild 1000 points
+    # (3) save the same train and respond data and move to comparison on matlab
+    # In order to plot the test data, we need the training data of krg
+
+    from mpl_toolkits.mplot3d import Axes3D
+    vio_setting = 122  # 122 for SMD11
+    test_xu, _, _ = init_xy(1000, problem_u, 0, **{'problem_type': 'bilevel'})
+
+    problem = problem_u.name()[0:-2]
+    working_folder = os.getcwd()
+    folder = 'bi_output'
+
+    result_folder = working_folder + '\\' + folder + '\\' + problem + '_sampleddata'
+    traindata_file = result_folder + '\\sampled_data_x_' + str(seed) + '.csv'
+    print(traindata_file)
+    x_both = np.loadtxt(traindata_file, delimiter=',')
+    traindata_file = result_folder + '\\sampled_data_y_' + str(seed) + '.csv'
+    print(traindata_file)
+    y_up = np.loadtxt(traindata_file, delimiter=',')
+
+    feasiflag_save = result_folder + '\\sampled_ll_feasi_' + str(seed) + '.joblib'
+    # print(feasiflag_save)
+    feasible_flag = joblib.load(feasiflag_save)
+
+    # extract upper level variable
+    train_size = 50
+
+    train_x = np.atleast_2d(x_both[0: train_size, 0:problem_u.n_levelvar]).reshape(-1, problem_u.n_levelvar)
+    train_y = np.atleast_2d(y_up[0: train_size]).reshape(-1, 1)
+    train_c = None
+    m = train_x.shape[0]
+    print('before rebuild number of data: %d' % m)
+
+    train_x, train_y, train_c = close_point_elimination(train_x, train_y, train_c)
+    n = train_x.shape[0]
+    print('after close elimination, number of data: %d' % n)
+
+    '''
+    # (4) check distances each training data
+    dist = np.zeros((train_size, train_size))
+    for i in range(train_size):
+        for j in range(train_size):
+            dist[i, j] = np.linalg.norm(train_x[i, :]-train_x[j, :])
+            if dist[i, j] < 1e-6 and i != j:
+                print('too close')
+                print(dist[i, j])
+                print(train_x[i, :])
+                print(train_x[j, :])
+    print(dist)
+    '''
+
+    # apply kriging
+    krg, krg_g = krg_training(train_x, train_y, None)
+    pred_y = trained_model_prediction(krg[0], train_x, train_y, test_xu, problem_u.n_levelvar)
+
+
+    # (2) find exhaustive search xl for train_x
+    #     then evaluate fu
+    #     use these xu-fu pair to build krg
+    test_fu, xl, vio_list = upper_y_from_exghaustive_search(problem_l, problem_u, train_x, vio_setting)
+
+    krg_exh, krg_g_exh = krg_training(train_x, test_fu, None)
+    pred_y_exh = trained_model_prediction(krg_exh[0], train_x, test_fu, test_xu, problem_u.n_levelvar)
+
+    # (3) visualisation
+    fig = plt.figure(figsize=(15, 20))
+    xu1_min = problem_u.xl[0]
+    xu1_max = problem_u.xu[0]
+
+    xu2_min = problem_u.xl[1]
+    xu2_max = problem_u.xu[1]
+    
+    # ------------------------------------------
+    # plot upper level fu with exhausive search
+    # prepare a 2d plot of infeasible and feasible
+    # warning: this only works for SMD10!!!
+    xu1_grid = np.linspace(problem_u.xl[0], problem_u.xu[0], 100)
+    xu2_grid = np.linspace(problem_u.xl[1], problem_u.xu[1], 100)
+    xu1_mesh, xu2_mesh = np.meshgrid(xu1_grid, xu2_grid)
+    cons = test_SMD10_contraints_visual(xu1_mesh, xu2_mesh)
+    feasi_index = np.argwhere(cons > 0)
+    feasi_index_1 = np.atleast_2d(feasi_index).reshape(-1, 2)[:, 0]
+    feasi_index_2 = np.atleast_2d(feasi_index).reshape(-1, 2)[:, 1]
+    xu1_c = xu1_mesh[feasi_index_1, feasi_index_2]
+    xu2_c = xu2_mesh[feasi_index_1, feasi_index_2]
+
+
+    ax1 = fig.add_subplot(121, projection='3d')
+    ax1.set_xlabel('xu1')
+    ax1.set_xlim([xu1_min, xu1_max])
+    ax1.set_ylabel('xu2')
+    ax1.set_ylim([xu2_min, xu2_max])
+    # ax1.set_zlim([z_min, z_max])
+    ax1.set_zlabel('fu')
+    cm = plt.cm.get_cmap('rainbow')
+    cl1 = ax1.scatter(test_xu[:, 0], test_xu[:, 1],
+                      pred_y_exh.ravel(), c=pred_y_exh.ravel(),
+                      cmap=cm)
+    ax1.scatter(train_x[:, 0], train_x[:, 1], test_fu.ravel(), c='k', marker ='X')
+
+    zlim = ax1.get_zlim()
+    ax1.scatter(xu1_c, xu2_c, zs=zlim[0], zdir='z')
+
+    ax1.set_title('kriging with exhausive search')
+    fig.colorbar(cl1, ax=ax1)
+    
+
+    ax2 = fig.add_subplot(122, projection='3d')
+    ax2.set_xlabel('xu1')
+    ax2.set_xlim([xu1_min, xu1_max])
+    ax2.set_ylabel('xu2')
+    ax2.set_ylim([xu2_min, xu2_max])
+    # ax1.set_zlim([z_min, z_max])
+    ax2.set_zlabel('fu')
+    cm = plt.cm.get_cmap('rainbow')
+    cl2 = ax2.scatter(test_xu[:, 0], test_xu[:, 1],
+                      pred_y.ravel(), c=pred_y.ravel(),
+                      cmap=cm)
+
+    ax2.scatter(train_x[:, 0], train_x[:, 1], train_y.ravel(), c='k', marker='X')
+    zlim = ax2.get_zlim()
+    ax2.scatter(train_x[:, 0], train_x[:, 1], zs=zlim[0], zdir='z', c='r', marker='X')
+
+    ax2.set_title('kriging rebuild with EGO search, 0.0 closeness check')
+    fig.colorbar(cl2, ax=ax2)
+    plt.show()
+
+    # (3) save train_x, train_y into csv file to study performance in matlab
+    save_x = 'train_x.csv'
+    save_y = 'train_y.csv'
+    save_test = 'test_x.csv'
+    np.savetxt(save_x, train_x, delimiter=',')
+    np.savetxt(save_y, train_y, delimiter=',')
+    np.savetxt(save_test, test_xu, delimiter=',')
+
+def SMD_distance_measure_compare(problem_u):
+    print('Not done')
+    from mpl_toolkits.mplot3d import Axes3D
+    vio_setting = 122  # 122 for SMD11
+
+    test_xu, _, _ = init_xy(1000, problem_u, 0, **{'problem_type': 'bilevel'})
+
+    problem = problem_u.name()[0:-2]
+    working_folder = os.getcwd()
+    folder = 'bi_output'
+
+    result_folder = working_folder + '\\' + folder + '\\' + problem + '_sampleddata'
+    traindata_file = result_folder + '\\sampled_data_x_' + str(seed) + '.csv'
+    print(traindata_file)
+    x_both = np.loadtxt(traindata_file, delimiter=',')
+    traindata_file = result_folder + '\\sampled_data_y_' + str(seed) + '.csv'
+    print(traindata_file)
+    y_up = np.loadtxt(traindata_file, delimiter=',')
+
+    feasiflag_save = result_folder + '\\sampled_ll_feasi_' + str(seed) + '.joblib'
+    # print(feasiflag_save)
+    feasible_flag = joblib.load(feasiflag_save)
+
+    # extract upper level variable
+    train_size = 50
+
+    train_x = np.atleast_2d(x_both[0: train_size, 0:problem_u.n_levelvar]).reshape(-1, problem_u.n_levelvar)
+    train_y = np.atleast_2d(y_up[0: train_size]).reshape(-1, 1)
+    train_c = None
+    m = train_x.shape[0]
+    print('before rebuild number of data: %d' % m)
+
+    fig = plt.figure(figsize=(15, 20))
+    xu1_min = problem_u.xl[0]
+    xu1_max = problem_u.xu[0]
+
+    xu2_min = problem_u.xl[1]
+    xu2_max = problem_u.xu[1]
 
 
 
-def saveEGOtraining(complete_xu, complete_yu, folder, problem_u, seed):
+    train_x_2, train_y_2, train_c_2 = close_point_elimination(train_x, train_y, train_c, 2)
+    n = train_x_2.shape[0]
+    print('after close elimination, number of data: %d' % n)
+    krg2, krg_g2 = krg_training(train_x_2, train_y_2, None)
+    pred_y2= trained_model_prediction(krg2[0], train_x_2, train_y_2, test_xu, problem_u.n_levelvar)
+
+
+
+    train_x_1, train_y_1, train_c_1 = close_point_elimination(train_x, train_y, train_c, 1)
+    n = train_x_1.shape[0]
+    print('after close elimination, number of data: %d' % n)
+    krg1, krg_g1 = krg_training(train_x_1, train_y_1, None)
+    pred_y1 = trained_model_prediction(krg1[0], train_x_1, train_y_1, test_xu, problem_u.n_levelvar)
+
+    fig = plt.figure(figsize=(20, 10))
+    ax2 = fig.add_subplot(121, projection='3d')
+    ax2.set_xlabel('xu1')
+    ax2.set_xlim([xu1_min, xu1_max])
+    ax2.set_ylabel('xu2')
+    ax2.set_ylim([xu2_min, xu2_max])
+    # ax1.set_zlim([z_min, z_max])
+    ax2.set_zlabel('fu')
+    cm = plt.cm.get_cmap('rainbow')
+    cl2 = ax2.scatter(test_xu[:, 0], test_xu[:, 1],
+                      pred_y2.ravel(), c=pred_y2.ravel(),
+                      cmap=cm)
+
+    ax2.scatter(train_x_2[:, 0], train_x_2[:, 1], train_y_2.ravel(), c='k', marker='X')
+    ax2.set_title('kriging rebuild with EGO search, 0.00 closeness check')
+    fig.colorbar(cl2, ax=ax2)
+
+    ax1 = fig.add_subplot(122, projection='3d')
+    ax1.set_xlabel('xu1')
+    ax1.set_xlim([xu1_min, xu1_max])
+    ax1.set_ylabel('xu2')
+    ax1.set_ylim([xu2_min, xu2_max])
+    # ax1.set_zlim([z_min, z_max])
+    ax1.set_zlabel('fu')
+    cm = plt.cm.get_cmap('rainbow')
+    cl1 = ax1.scatter(test_xu[:, 0], test_xu[:, 1],
+                      pred_y1.ravel(), c=pred_y1.ravel(),
+                      cmap=cm)
+
+    ax1.scatter(train_x_1[:, 0], train_x_1[:, 1], train_y_1.ravel(), c='k', marker='X')
+    ax1.set_title('kriging rebuild with EGO search, 0.0 closeness check')
+    fig.colorbar(cl1, ax=ax1)
+    plt.show()
+
+def close_point_elimination(train_x_orig, train_y_orig, train_c_orig, measure):
+
+
+    train_x_orig = check_array(train_x_orig)
+    train_y_orig = check_array(train_y_orig)
+
+
+    if train_c_orig is not None:
+        train_c_orig = check_array(train_c_orig)
+        train_c = copy.deepcopy(train_c_orig)
+    else:
+        train_c = None
+
+    train_x = copy.deepcopy(train_x_orig)
+    train_y = copy.deepcopy(train_y_orig)
+
+    # train_x = train_x_orig
+    # train_y = train_y_orig
+
+    # train_c = train_c_orig
+
+    norm_x = normalization_with_self(train_x)
+    norm_x, id = np.unique(np.around(norm_x, measure), axis=0, return_index=True)
+    z = len(id)
+    # print('after elimiation train size becomes: %d' %z)
+    # n = train_x_orig.shape[0]
+    # m = len(id)
+    # print('before closeness elimination: %d' % n)
+    # print('after closeness elimination: %d' % m)
+
+    train_x = np.atleast_2d(train_x[id, :])
+    train_y = np.atleast_2d(train_y[id, :])
+    if train_c is not None:
+        train_c = np.atleast_2d(train_c[id, :])
+    return train_x, train_y, train_c
+
+
+def krg_training(train_x, train_y, train_c):
+    train_x_norm, x_mean, x_std = norm_by_zscore(train_x)
+    train_y_norm, y_mean, y_std = norm_by_zscore(train_y)
+
+    train_x_norm = np.atleast_2d(train_x_norm)
+    train_y_norm = np.atleast_2d(train_y_norm)
+
+    if train_c is not None:
+        train_c_norm, c_mean, c_std = norm_by_zscore(train_c)
+        train_c_norm = np.atleast_2d(train_c_norm)
+    else:
+        train_c_norm = None
+
+    krg, krg_g = cross_val_krg(train_x_norm, train_y_norm, train_c_norm, False)
+    return krg, krg_g
+
+def saveEGOtraining(complete_xu, complete_yu, folder, problem_u, feasible_check, seed):
 
     problem = problem_u.name()[0:-2]
     working_folder = os.getcwd()
@@ -1327,6 +2052,11 @@ def saveEGOtraining(complete_xu, complete_yu, folder, problem_u, seed):
 
     egodata_save = result_folder + '\\sampled_data_y_'+str(seed)+'.csv'
     np.savetxt(egodata_save, complete_yu, delimiter=',')
+
+    feasi_save = result_folder + '\\sampled_ll_feasi_' + str(seed) + '.joblib'
+    joblib.dump(feasible_check, feasi_save)
+
+
 
 def EGO_rebuildplot(problem_u, folder):
     # load data
@@ -1388,7 +2118,7 @@ def results_process_bestf(BO_target_problems, method_selection, seedmax, folder)
     median_seed_accrossProblems = []
     pname_list = []
 
-    seedlist = [0, 5, 8, 6, 5, 4, 1, 9]  # test only
+    # seedlist = [0, 5, 8, 6, 5, 4, 1, 9]  # test only
 
     seed_i = 0
     for j in np.arange(0, n, 2):
@@ -1402,14 +2132,14 @@ def results_process_bestf(BO_target_problems, method_selection, seedmax, folder)
         result_folder = working_folder + '\\' + folder + '\\' + problem_name + '_' + method_selection
 
         accuracy_data = []
-        # for seed_index in range(seedmax):
+        for seed_index in range(seedmax):
         #------- move back for indent correction, when uncomment the above line
-        seed_index = seedlist[seed_i]  # test only
-        # saveName = result_folder + '\\accuracy_before_evaluation' + str(seed_index) + '.csv'
-        saveName = result_folder + '\\accuracy_' + str(seed_index) + '.csv'
-        data = np.loadtxt(saveName, delimiter=',')
-        accuracy_data = np.append(accuracy_data, data)
-        seed_i = seed_i + 1  # test only
+            # seed_index = seedlist[seed_i]  # test only
+            # saveName = result_folder + '\\accuracy_before_evaluation' + str(seed_index) + '.csv'
+            saveName = result_folder + '\\accuracy_' + str(seed_index) + '.csv'
+            data = np.loadtxt(saveName, delimiter=',')
+            accuracy_data = np.append(accuracy_data, data)
+            seed_i = seed_i + 1  # test only
         #-------------------------------------------------------------------------
 
         accuracy_data = np.atleast_2d(accuracy_data).reshape(-1, 2)
@@ -1467,7 +2197,7 @@ def combine_fev(BO_target_problems, method_selection, max_seed):
     folders = ['bi_output']  #, 'bi_local_output']
     mean_cross_strategies = []
 
-    seedlist = [0, 5, 8, 6, 5, 4, 1, 9]  # test only
+    # seedlist = [0, 5, 8, 6, 5, 4, 1, 9]  # test only
     seed_i = 0
 
     for folder in folders:
@@ -1485,11 +2215,11 @@ def combine_fev(BO_target_problems, method_selection, max_seed):
 
             n_fev = []
             # ------this section to mark where to indent when uncomment the following 'for' line
-            # for seed_index in range(max_seed):
-            seed_index = seedlist[seed_i]
-            saveName = result_folder + '\\ll_nfev' + str(seed_index) + '.csv'
-            data = np.loadtxt(saveName, delimiter=',')
-            n_fev = np.append(n_fev, data)
+            for seed_index in range(max_seed):
+            # seed_index = seedlist[seed_i]
+                saveName = result_folder + '\\ll_nfev' + str(seed_index) + '.csv'
+                data = np.loadtxt(saveName, delimiter=',')
+                n_fev = np.append(n_fev, data)
             #----------------------------------------------
 
             mean_nfev = np.median(n_fev)
@@ -1909,13 +2639,29 @@ def uplevel_localsearch_visual(train_x, train_y, train_c, n_before_ls,
 
     # plt.show()
 
-
-def test_if(a,b):
+def test_if(a, b):
     a = (True, False) if a > b else (False, True)
     return zip(a)
 
-if __name__ == "__main__":
+def test_SMD10_contraints_visual(gridxu1, gridxu2):
+    # if feasible cons = 1
+    # if not feasible cons = -1
+    cons1 = gridxu1 - gridxu2 ** 3
+    cons2 = gridxu2 - gridxu1 ** 3
 
+    cons1[cons1 >= 0] = 1
+    cons2[cons2 >= 0] = 1
+    cons1[cons1 < 0] = -2
+    cons2[cons2 < 0] = -2
+    cons = cons1 +  cons2
+
+    cons[cons<0] = -1
+    cons[cons>0] = 1
+    return cons
+
+
+if __name__ == "__main__":
+    seed = 0
     # rebuild_surrogate_and_plot()
 
     # problems_json = 'p/bi_problems'
@@ -1923,12 +2669,104 @@ if __name__ == "__main__":
     with open(problems_json, 'r') as data_file:
         hyp = json.load(data_file)
     target_problems = hyp['BO_target_problems']
+    np.random.seed(seed)
 
-    problem_u = eval(target_problems[0])
-    problem_l = eval(target_problems[1])
+    # x = np.atleast_2d([-4.05, -4.99, 1.56])
+    # bu = [10, 10, 1.57]
+    # bl = [-5, -5, -1.57]
+    # x = boundary_closeness_check(x, bu, bl)
 
-    # SMD_invest(problem_u, problem_l, 200)
-    SMD_invest_visualisation(problem_u, problem_l)
+    problem_u = eval(target_problems[2])
+    problem_l = eval(target_problems[3])
+    # xu = np.atleast_2d([1., 1.])
+    # xl = np.atleast_2d([1., 1., np.pi/4.0])
+    # x = np.hstack((xu, xl))
+    # fu, cu = problem_u.evaluate(x, return_values_of=['F','G'])
+    # fl, cl = problem_l.evaluate(x, return_values_of = ['F', 'G'])
+
+    # SMD_invest_retrieve_vio(problem_u, 'bi_output', 0)
+    #SMD_invest(problem_u, problem_l, None, 0)
+
+    # SMD_invest_visualisation(problem_u, problem_l, seed)
+    # SMD_investigate_kriging(problem_u, problem_l, seed)
+    SMD_distance_measure_compare(problem_u)
+
+    '''
+    xu = np.atleast_2d([-3.85516901709, 9.597879966999528])
+    eim_l = EI.EIM(problem_l.n_levelvar, n_obj=1, n_constr=0,
+                   upper_bound=problem_l.xu,
+                   lower_bound=problem_l.xl)
+    matching_x, matching_f, n_fev_local, feasible_flag = \
+        search_for_matching_otherlevel_x(xu, 20, 30, problem_l, 'lower', eim_l, 100, 100, seed, False, 'eim')
+
+    print(matching_f)
+    
+    xu1_grid = np.linspace(-5, 10, 100)
+    xu2_grid = np.linspace(-5, 10, 100)
+    xu1_mesh, xu2_mesh = np.meshgrid(xu1_grid, xu2_grid)
+    cons = test_SMD10_contraints_visual(xu1_mesh, xu2_mesh)
+
+    feasi_index = np.argwhere(cons > 0)
+    infeasi_index = np.argwhere(cons < 0)
+
+    feasi_index_1 = np.atleast_2d(feasi_index).reshape(-1, 2)[:, 0]
+    feasi_index_2 = np.atleast_2d(feasi_index).reshape(-1, 2)[:, 1]
+
+    infeasi_index_1 = np.atleast_2d(infeasi_index).reshape(-1, 2)[:, 0]
+    infeasi_index_2 = np.atleast_2d(infeasi_index).reshape(-1, 2)[:, 1]
+
+    fc_xu1 = xu1_mesh[feasi_index_1, feasi_index_2]
+    fc_xu2 = xu2_mesh[feasi_index_1, feasi_index_2]
+
+
+    a = 0
+    fig = plt.figure()
+    ax1 = fig.add_subplot(111)
+    ax1.scatter(fc_xu1, fc_xu2)
+    ax1.set_xlim(-5, 10)
+    ax1.set_ylim(-5, 10)
+    plt.show()
+    '''
+
+
+
+    # problem_u = eval("SMD.SMD10_F(1,1,1)")
+    # problem_l = eval("SMD.SMD10_f(1,1,1)")
+    # invest_SMD_one_instance(problem_u, problem_l, 22, 0)
+
+    '''
+    working_folder = os.getcwd()
+    result_folder = working_folder + '\\bi_output\\real_function'
+    filename = result_folder + '\\SMD9_testdate_sur_seed_0_0.joblib'
+    section = joblib.load(filename)
+    a = 0
+    
+    # ----parallel data generation-----
+    problem = problem_u.name()[0:-2]
+    working_folder = os.getcwd()
+    folder = 'bi_output'
+
+    # save these test data
+    result_folder = working_folder + '\\' + folder + '\\real_function'
+    if not os.path.isdir(result_folder):
+        os.mkdir(result_folder)
+
+    vio_setting = SMD_invest_retrieve_vio(problem_u, 'bi_output', 0)
+
+    # create test data from variable bounds
+    # testdata = np.linspace(problem_u.xl, problem_u.xu, 1000)
+    testdata, _, _ = init_xy(1000, problem_u, 0, **{'problem_type': 'bilevel'})
+
+    # surrogate_react_2_testdata(0, testdata, problem_u, problem_l, result_folder, seed)
+
+    args = test_data_parall(testdata, problem_u, problem_l, result_folder, seed, vio_setting)
+    # args = paral_args_temp(target_problems, seed_max, False, methods_ops, alg_settings)
+    num_workers = 5
+    pool = mp.Pool(processes=num_workers)
+    pool.starmap(surrogate_react_2_testdata, ([arg for arg in args]))
+    # ----parallel data generation-----
+    '''
+
 
 
 
@@ -1938,82 +2776,8 @@ if __name__ == "__main__":
     # ------------ result process--------------
     # problems = target_problems
     # folder = hyp['alg_settings']['folder']
-    # results_process_bestf(problems, 'eim', 1, folder)
-    # combine_fev(problems, 'eim', 1)
+    # results_process_bestf(problems, 'eim', 5, folder)
+    # combine_fev(problems, 'eim', 5)
     # results_process_before_after(problems, 'eim', 'bi_output', 'accuracy', 29)
     # --------------result process ------------
-
-
-    '''
-    # check with prblem BLTP5
-    x_u = np.atleast_2d([17.0/9.0])
-    # x_u = np.atleast_2d([1.80783])
-    x_l = np.atleast_2d([[0.86488, 0.00]])
-    problems = target_problems[0:2]
-    target_problem_u = eval(problems[0])
-    target_problem_l = eval(problems[1])
-
-    eim_l = EI.EIM(target_problem_l.n_levelvar, n_obj=1, n_constr=0,
-                   upper_bound=target_problem_l.xu,
-                   lower_bound=target_problem_l.xl)
-
-    matching_x, matching_f, n_fev_local, feasible_flag = \
-        search_for_matching_otherlevel_x(x_u, 30, 20, target_problem_l, 'lower', eim_l, 100, 100, 0, False, 'eim')
-
-    localsearch_xl = matching_x
-
-    print('lowerlevel search returns feasibility: %d' % feasible_flag)
-
-    localsearch_xl, localsearch_fl, local_fev = \
-        hybridsearch_on_trueEvaluation(x_l, 'lower', x_u, target_problem_l)
-
-    new_complete_x = np.hstack((np.atleast_2d(x_u), np.atleast_2d(localsearch_xl)))
-    new_fl = target_problem_l.evaluate(new_complete_x, return_values_of=["F"])
-    new_fu = target_problem_u.evaluate(new_complete_x, return_values_of=["F"])
-    print('fu after re-valuation')
-    print(new_fu)
-
-    old_complete_x = np.hstack((np.atleast_2d(x_u), np.atleast_2d(x_l)))
-    old_fu = target_problem_u.evaluate(old_complete_x, return_values_of=["F"])
-    print('fu before re-valuation')
-    print(old_fu)
-
-    x_uopt = np.atleast_2d([17.0/9.0])
-    x_lopt = np.atleast_2d([8/9, 0])
-    x_best = np.hstack((x_uopt, x_lopt))
-    fl_opt, gl_opt = target_problem_l.evaluate(x_best, return_values_of=["F", "G"])
-    fu_opt = target_problem_u.evaluate(x_best, return_values_of=["F"])
-    print('best upper level f: %.5f' % fu_opt)
-    print('best lower level f: %.5f' % fl_opt)
-    print('best lower level constrait')
-    print(gl_opt) 
-    '''
-
-
-
-    '''
-    from surrogate_problems import BLTP
-    seed = 1
-    np.random.seed(seed)
-    target_problem_u = BLTP.BLTP9_F()  # p, r, q
-    target_problem_l = BLTP.BLTP9_f()  # p, r, q
-
-    xu, _, _ = init_xy(30, target_problem_u, seed, **{'problem_type': 'bilevel'})
-    xl, _, _ = init_xy(30, target_problem_l, seed, **{'problem_type': 'bilevel'})
-    # visualization_smd3(problem, 0)
-    np.savetxt('testxu.csv', xu, delimiter=',')
-    np.savetxt('testxl.csv', xl, delimiter=',')
-
-    x = np.hstack((xu, xl))
-    f, g = target_problem_l.evaluate(x, return_values_of=['F', 'G'])
-    print(f)
-    print(g)
-    f, g = target_problem_u.evaluate(x, return_values_of=['F', 'G'])
-    print(f)
-    print(g)   
-    '''
-
-
-
-
 
