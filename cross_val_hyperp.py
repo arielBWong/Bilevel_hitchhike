@@ -180,7 +180,7 @@ def n_fold_cross_val(train_x, train_y, cons_y):
     train_x = train_x[index_samples, :]
     train_y = train_y[index_samples, :]
     if n_sur_cons > 0:
-        print(cons_y.shape[0])
+        # print(cons_y.shape[0])
         cons_y = cons_y[index_samples, :]
 
 
@@ -241,23 +241,28 @@ def n_fold_cross_val(train_x, train_y, cons_y):
     results_obj_map = np.array(results_map).reshape(n, n_sur_objs)
     mse_min_index = np.argmin(results_obj_map, 0)
 
+
     if n_sur_cons > 0:
         results_g_map = np.array(results_g_map).reshape(n, n_sur_cons)
         mse_min_g_index = np.argmin(results_g_map, 0)
 
     gpr = []
+    gpr_mse = []
     for i in range(n_sur_objs):
         one_obj_y = np.atleast_2d(train_y[:, i]).reshape(-1, 1)
         # gpr.append(recreate_gpr(mse_min_index[i], n, fold_size, index_samples, train_x, one_obj_y))
         gpr.append(recreate_krg(mse_min_index[i], n, fold_size, index_samples, train_x, one_obj_y))
+        gpr_mse.append(results_obj_map[mse_min_index[i], i])
 
     gpr_g = []
+    gpr_g_mse = []
     for i in range(n_sur_cons):
         one_cons_g = np.atleast_2d(cons_y[:, i]).reshape(-1, 1)
         # gpr_g.append(recreate_gpr(mse_min_g_index[i], n, fold_size, index_samples, train_x, one_cons_g))
         gpr_g.append(recreate_krg(mse_min_g_index[i], n, fold_size, index_samples, train_x, one_cons_g))
+        gpr_g_mse.append(results_g_map[mse_min_g_index[i],i])
 
-    return gpr, gpr_g
+    return (gpr, gpr_mse), (gpr_g, gpr_g_mse)
 
 def create_krg(train_x, train_y):
 

@@ -1516,6 +1516,8 @@ def main_bi_mo(seed_index, target_problem, enable_crossvalidation, method_select
          'enable_crossvalidation': enable_crossvalidation,
          'method_selection': method_selection}
 
+
+
     # ------------ upper level EGO iterations ----------------
     # find lower level problem complete for this new pop_x
     for i in range(n_iter):

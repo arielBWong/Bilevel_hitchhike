@@ -91,7 +91,7 @@ class SMD1_f(Problem):
         f2 = np.sum(xl1 ** 2, axis=1)
         f3 = np.sum((xu2 - np.tan(xl2))**2, axis=1)
 
-        out["F"] = f1 + f2 + f3
+        out["F"] =f1 + f2 + f3
 
 class SMD2_F(Problem):
 
@@ -919,8 +919,8 @@ class SMD10_f(Problem):
         xl1_u = [10] * q
         xl1_l = [-5] * q
 
-        xl2_u = [np.pi/2 - 1e-8] * r
-        xl2_l = [-np.pi/2 + 1e-8] * r
+        xl2_u = [np.pi/2] * r
+        xl2_l = [-np.pi/2] * r
 
         self.xl = anp.array(xl1_l + xl2_l)
         self.xu = anp.array(xl1_u + xl2_u)
@@ -945,7 +945,7 @@ class SMD10_f(Problem):
         f2 = np.sum((xl1 - 2) ** 2, axis=1)
         f3 = np.sum((xu2 - np.tan(xl2)) ** 2, axis=1)
 
-        out["F"] = f1 + f2 + f3
+        out["F"] = (f1 + f2 + f3)
 
         g = []
         for j in range(self.q):
