@@ -11,6 +11,7 @@ from cross_val_hyperp import cross_val_krg
 from surrogate_problems import branin, GPc, Gomez3, Mystery, Reverse_Mystery, SHCBc, HS100, Haupt_schewefel, \
                                MO_linearTest, single_krg_optim, WFG, iDTLZ, DTLZs, SMD, EI, Surrogate_test,BLTP
 
+import ipopt
 import os
 import json
 import copy
@@ -190,7 +191,6 @@ def search_for_matching_otherlevel_x(x_other, search_iter, n_samples, problem, l
         complete_y = np.vstack((complete_y, complete_new_y))
 
     # after ego, decide where to start local search
-
     if problem.n_constr > 0:
         # print('constr process')
         complete_y_feasible, train_x_feasible = return_feasible(complete_c, complete_y, train_x)
@@ -202,14 +202,9 @@ def search_for_matching_otherlevel_x(x_other, search_iter, n_samples, problem, l
             best_x = train_x[best_y_index, :]
             best_x = np.atleast_2d(best_x)
             best_y = np.min(complete_y)
-            # print(best_x)
-            # print(best_y)
         else:
             # print("lower ego fail to find feasible, local search start with x: ")
             best_x, best_y = nofeasible_select(complete_c, complete_y, train_x)
-            # print(best_x)
-
-            # print("before local search, closest best y: %.4f" % best_y)
     else:
         best_y_index = np.argmin(complete_y)
         best_x = train_x[best_y_index, :]
@@ -219,49 +214,15 @@ def search_for_matching_otherlevel_x(x_other, search_iter, n_samples, problem, l
     # conduct local search with true evaluation
     # print('from matching search...returned local search')
     # print('adding preprocessing, if starting point is too close to  bound move inwards...')
-    best_x = boundary_closeness_check(best_x, problem.xu, problem.xl)
+    # best_x = boundary_closeness_check(best_x, problem.xu, problem.xl)
 
 
-    localsearch_x, localsearch_f, success, n_fev, _, _, _, _ = \
-        localsearch_on_trueEvaluation(best_x, 100, level, x_other, problem, None, None, None, None)
+    # localsearch_x, localsearch_f, success, n_fev, _, _, _, _ = \
+    #     localsearch_on_trueEvaluation(best_x, 100, level, x_other, problem, None, None, None, None)
+
+    localsearch_x, localsearch_f, success, n_fev, _, _, _, _ = IPsearch_on_trueEvaluation(best_x, 100, 'lower', x_other, problem,'eim',
+                                                                              None, None, None, None)
     n_fev = n_fev + search_iter + n_samples
-    # print('local search success is : ')
-    # print(success)
-
-
-
-    if len(complete_y_feasible) > 0 and not success:
-        best_x = boundary_closeness_check(best_x, problem.xu, problem.xl)
-        localsearch_x, localsearch_f, success, n_fev, _, _, _, _ = \
-            localsearch_on_trueEvaluation(best_x, 100, level, x_other, problem, None, None, None, None)
-        n_fev = n_fev + search_iter + n_samples
-        print('after adjusted xl start, local search status')
-        print(success)
-    if not success:
-        print('not success, startx, endx, endf')
-        print(best_x)
-        print(localsearch_x)
-        print(localsearch_f)
-
-
-
-    # print('fl is ')
-    # print(localsearch_f)
-    # print('\n')
-
-    # print('local search %s level, before %.4f, after %.4f' % (level, best_y, localsearch_f))
-    # print('local search found lx')
-    # print(localsearch_x)
-
-    '''
-    if problem.n_constr > 0:
-        if len(complete_y_feasible) > 0:
-            print('feasible exist after surrogate for upper xu ')
-            print(x_other)
-        else:
-            print('no feasible after surrogate for upper xu %0.4f')
-            print(x_other)
-    '''
 
 
     # decide which x is returned
@@ -452,6 +413,7 @@ def hybridsearch_on_trueEvaluation(ankor_x, level, other_x, true_problem, ea_pop
 
     # check feasibility
     best_x = np.atleast_2d(best_x)
+    other_x = np.atleast_2d(other_x)
 
     f, c = true_problem.evaluate(np.hstack((other_x, best_x)), return_values_of=['F', 'G'])
     print('after EA true evaluation: ')
@@ -464,7 +426,7 @@ def hybridsearch_on_trueEvaluation(ankor_x, level, other_x, true_problem, ea_pop
         print('EA returns feasible solutions')
 
     best_x, best_f, _, nfev, _, _, _, _ = \
-        localsearch_on_trueEvaluation(best_x, 250, "lower", other_x, true_problem,
+        IPsearch_on_trueEvaluation(best_x, 250, "lower", other_x, true_problem,'eim',
                                       None, None, None, None)
     nfev = nfev + ea_pop * ea_gen
 
@@ -500,8 +462,14 @@ def ankor_selection(data_x, data_y, data_c, target_problem):
             # identify best feasible solution
             z = len(y_feas)
             print('after ankor selection, %d points left' % z)
+
+
             min_fu_index = np.argmin(y_feas)
             best_y = np.min(y_feas)
+            best_x = np.atleast_2d(x_feas[min_fu_index, :])
+
+            g = target_problem.evaluate(best_x, return_values_of=['G'])
+            print(g)
             # extract xu
             best_x_sofar = np.atleast_2d(x_feas[min_fu_index, 0:target_problem.n_levelvar])
         else:  # process situation where no feasible solutions
@@ -529,6 +497,7 @@ def bilevel_localsearch(target_problem_u, complete_x_u, complete_y_u, complete_c
     print('starting fu')
     print(best_fu)
 
+    '''
     new_xu, new_fu, success, n_fev_local, feasible_check, complete_x_u, complete_y_u, complete_c_u = \
         localsearch_on_trueEvaluation(best_xu_sofar,
                                       20,
@@ -540,11 +509,280 @@ def bilevel_localsearch(target_problem_u, complete_x_u, complete_y_u, complete_c
                                       complete_c_u,
                                       feasible_check,
                                       **bi_para)
+    '''
+
+    new_xu, new_fu, success, n_fev_local, feasible_check, complete_x_u, complete_y_u, complete_c_u = \
+        IPsearch_on_trueEvaluation(best_xu_sofar,
+                                      20,
+                                      'upper',
+                                      None,
+                                      target_problem_u,
+                                     'eim',
+                                      complete_x_u,
+                                      complete_y_u,
+                                      complete_c_u,
+                                      feasible_check,
+                                      **bi_para)
     print('end point is :')
     print(new_xu)
     print('end point fu is: ')
     print(new_fu)
     return new_xu, n_fev_local, feasible_check, complete_x_u, complete_y_u, complete_c_u
+
+
+def IPsearch_on_trueEvaluation(ankor_x, max_eval, level_s, other_x, true_problem, method,  #  **bi_para):
+                                  complete_x_u,     # include existing samples for bilevel local search
+                                  complete_y_u,     # include existing samples for bilevel local search
+                                  complete_c_u,     # include existing samples for bilevel local search
+                                  feasible_check,   # include feasible_check, this variable flag lower level infeasibility
+                                  **bi_para):
+    ankor_x = np.atleast_2d(ankor_x)
+    if other_x is not None:
+        other_x = np.atleast_2d(other_x)
+    bi_matching_x = None
+    up_evalcount = 0
+    n_obj = true_problem.n_obj
+    n_cons = true_problem.n_constr
+    n_var = true_problem.n_levelvar
+    n_combo = true_problem.n_var
+    lb0 = true_problem.xl[0]  # this variable is only used for create the first row of unique_xus
+
+    def bilevel_external_change(feasible_flag, x, f, c):
+        # bilevel search recording evaluated xu
+        # if lower level return infeasible solution xl
+        # f value of upper level needs to be changed to penalty values
+        # double check with feasibility returned from other level
+        nonlocal feasible_check
+        nonlocal up_evalcount
+        nonlocal complete_x_u
+        nonlocal complete_y_u
+        nonlocal complete_c_u
+        feasible_check = np.append(feasible_check, feasible_flag)
+
+        # adding new xu yu to training
+        complete_x_u = np.vstack((complete_x_u, x))
+        complete_y_u = np.vstack((complete_y_u, f))
+        complete_c_u = np.vstack((complete_c_u, c))
+        if feasible_flag is False:
+            complete_y_u = feasibility_adjustment_3_dynamic(complete_y_u, feasible_check)
+
+
+    class localproblem(object):
+        def __init__(self):
+            self.nfev = 0  # local used in single level local search
+            self.unique_xus = np.atleast_2d([lb0 - 1] * n_combo)  # this variable is used to reduce local search
+            self.unique_xls = np.atleast_2d([lb0 - 1] * n_var)   # this variable only used in single level local search
+            self.single_f = np.atleast_2d([1e8]*n_obj)  # only for matching the first row of other unique xus xls
+            pass
+
+        def check_matchingxl(self, x):
+            # if two x are identical in 16 digits, consider themg same value
+            x = check_array(x)
+            xu_searched = copy.deepcopy(self.unique_xus[:, 0:n_var])
+            xu_searched = np.around(xu_searched, 16)
+            xu_check = copy.deepcopy(x)
+            xu_check = np.around(xu_check, 16)
+            xl = None
+            n = self.unique_xus.shape[0]
+            for i in range(n):
+                if len(np.unique(np.vstack((xu_check, xu_searched[i, :])), axis=0)) == 1:
+                    xl = self.unique_xus[i, n_var:]
+                    break
+            return xl
+
+        def check_matchingx(self, x):
+            # if two x are identical in 16 digits, consider themg same value
+            x = check_array(x)
+            x_searched = copy.deepcopy(self.unique_xls)
+            x_searched = np.around(x_searched, 16)
+            x_check = copy.deepcopy(x)
+            x_check = np.around(x_check, 16)
+            n = self.unique_xls.shape[0]
+            f = None
+            for i in range(n):
+                if len(np.unique(np.vstack((x_check, x_searched[i, :])), axis=0)) == 1:
+                    f = self.single_f[i, :]
+                    break
+            return f
+
+
+
+        def add_unique_xu(self, newx):
+            # extend unique xusg
+            self.unique_xus = np.vstack((self.unique_xus, newx))
+
+
+        def objective(self, x):
+            nonlocal feasible_check
+            nonlocal complete_x_u
+            nonlocal complete_y_u
+            nonlocal complete_c_u
+            nonlocal bi_matching_x
+
+            x = np.atleast_2d(x)
+            if other_x is not None:  # means single level optimization
+
+                f = self.check_matchingx(x)  # determine whether x has been evaluated
+                if f is None:
+                    self.nfev = self.nfev + 1
+                    self.unique_xls = np.vstack((self.unique_xls,x))
+                    if level_s == 'lower':
+                        x = np.hstack((other_x, x))
+                    else:
+                        x = np.hstack((x, other_x))
+                    f = true_problem.evaluate(x, return_values_of=["F"])
+                    self.single_f = np.vstack((self.single_f, f))
+
+
+            else:
+                # print('bilevel objective calculation with lower search for xu: %s' % repr(x))
+                # check whether x has been matched
+                xl = self.check_matchingxl(x)
+                if xl is not None:
+                    bi_matching_x = np.atleast_2d(xl)  # double security
+                    x_combo = np.hstack((x, bi_matching_x))
+                    # print('objective calculation found existing match')
+                    f, c = true_problem.evaluate(x_combo, return_values_of=["F", "G"])
+                else:
+                    # print('objective calculation has no existing match')
+
+                    matching_xl, matching_fl, n_fev_local, feasible_flag = \
+                        search_for_matching_otherlevel_x(x, **bi_para)
+                    bi_matching_x = np.atleast_2d(matching_xl)  # double security
+                    x_combo = np.hstack((x, bi_matching_x))
+                    self.add_unique_xu(x_combo)
+                    f, c = true_problem.evaluate(x_combo, return_values_of=["F", "G"])
+                    bilevel_external_change(feasible_flag, x_combo, f, c)  # recording for upper level xu
+
+            f = f.flatten()  # consistent with ipopt
+            return np.array(f)
+
+        def constraints(self, x):
+            nonlocal  bi_matching_x
+
+            x = np.atleast_2d(x)
+            if other_x is not None:  # means single level optimization
+                if level_s == 'lower':
+                    x = np.hstack((other_x, x))
+                else:
+                    x = np.hstack((x, other_x))
+
+                constr = true_problem.evaluate(x, return_values_of=["G"])
+
+            else:
+                xl = self.check_matchingxl(x)
+                if xl is not None:
+                    bi_matching_x = np.atleast_2d(xl)  # double security
+                    x_combo = np.hstack((x, bi_matching_x))
+                    f, constr = true_problem.evaluate(x_combo, return_values_of=["F", "G"])
+                    # print('constraint calculation found existing match')
+                else:
+                    # print('constraint calculation has no existing match')
+
+                    matching_xl, matching_fl, n_fev_local, feasible_flag = \
+                        search_for_matching_otherlevel_x(x, **bi_para)
+                    bi_matching_x = np.atleast_2d(matching_xl)  # double security
+                    x_combo = np.hstack((x, bi_matching_x))
+                    self.add_unique_xu(x_combo)
+
+                    f, constr = true_problem.evaluate(x_combo, return_values_of=["F", "G"])
+
+                    bilevel_external_change(feasible_flag, x_combo, f, constr)  # recording for upper level xu
+
+
+
+            constr = constr.flatten()
+            return np.array(constr)
+
+        def gradient(self, x):
+            x = x.flatten()  # ipopt ask for 1d
+            eps = 1e-8
+
+            # if other_x is None:
+                # print('bilevel gradient center on %s '% repr(x))
+            f0 = self.objective(x)
+            jac = np.zeros(len(x))
+            dx = np.zeros(len(x))
+
+            for i in range(len(x)):
+                dx[i] = eps
+                jac[i] = (self.objective(x + dx) - f0) / eps
+                dx[i] = 0.0
+
+            return np.array(jac)
+
+        def jacobian(self, x):
+            x = x.flatten()
+            eps = 1e-8
+
+            # if other_x is None:
+                # print('bilevel jacobian center on %s '% repr(x))
+            g0 = self.constraints(x)
+            jac = np.zeros([len(x), len(g0)])
+            dx = np.zeros(len(x))
+
+            for i in range(len(x)):
+                dx[i] = eps
+                jac[i] = (self.constraints(x + dx) - g0) / eps
+                dx[i] = 0.0
+            jac = jac.transpose().flatten()
+            # if other_x is None:
+               # print('bilevel jacobian through \n')
+            return np.array(jac)
+
+    lb = true_problem.xl
+    ub = true_problem.xu
+
+    cl = [-np.inf] * true_problem.n_constr
+    cu = [0] * true_problem.n_constr
+    ankor_x = ankor_x.flatten() # 1d for ipopt
+
+
+    p_local = localproblem()
+    nlp = ipopt.problem(
+        n=len(ankor_x),
+        m=len(cl),
+        problem_obj=p_local,
+        lb=lb,
+        ub=ub,
+        cl=cl,
+        cu=cu
+    )
+    nlp.addOption('mu_strategy', 'adaptive')
+    nlp.addOption('tol', 1e-6)
+    nlp.addOption('print_level', 0)
+    #nlp.addOption('constr_viol_tol', 1e-10)
+    if other_x is None:
+        nlp.addOption('max_iter', 20)
+        nlp.addOption('print_level', 5)
+        # nlp.addOption('max_cpu_time', 300.0)
+    else:
+        # nlp.addOption('max_cpu_time', 300.0)
+        nlp.addOption('max_iter', 50)
+
+    if other_x is None:
+        print('bilevel starting point: %s' % repr(ankor_x))
+
+    x, info = nlp.solve(ankor_x)
+
+    if other_x is None:
+        # print(info)
+        print("Solution of the primal variables: x=%s\n" % repr(x))
+        print("Objective=%s" % repr(info['obj_val']))
+        print('Constraints')
+        x2 = p_local.constraints(x)
+        print(x2)
+
+    x = np.atleast_2d(x)
+    f = info['obj_val']
+    success = info['status']
+    nfev = p_local.nfev
+    # if other_x is not None:
+        # print('lower search on nfev: %d \n' %p_local.nfev)
+
+    return x, f, success, nfev, feasible_check, complete_x_u, complete_y_u, complete_c_u
+
+
 
 def localsearch_on_trueEvaluation(ankor_x, max_eval, level_s, other_x, true_problem, method,
                                   complete_x_u,     # include existing samples for bilevel local search
@@ -552,7 +790,7 @@ def localsearch_on_trueEvaluation(ankor_x, max_eval, level_s, other_x, true_prob
                                   complete_c_u,     # include existing samples for bilevel local search
                                   feasible_check,   # include feasible_check, this variable flag lower level infeasibility
                                   **bi_para):
-
+# has problem of unstable
     ankor_x = np.atleast_2d(ankor_x)
     if other_x is not None:
         other_x = np.atleast_2d(other_x)
@@ -2966,11 +3204,6 @@ def test_cross_val(problem_l):
 
 
 if __name__ == "__main__":
-    import matlab.engine
-    eng = matlab.engine.start_matlab()
-
-    tf = eng.isprime(37)
-    print(tf)
 
     seed = 0
     # rebuild_surrogate_and_plot()
@@ -2981,25 +3214,7 @@ if __name__ == "__main__":
         hyp = json.load(data_file)
     target_problems = hyp['BO_target_problems']
     np.random.seed(seed)
-    x = np.pi/2 - 1e-8
-    print(x)
-    print(1.5608265570618167)
 
-    # x = np.atleast_2d([-4.05, -4.99, 1.56])
-    # bu = [10, 10, 1.57]
-    # bl = [-5, -5, -1.57]
-    # x = boundary_closeness_check(x, bu, bl)
-
-    '''
-    x = np.arange(9) - 4
-    b = x.reshape((-1, 3))
-    c = np.linalg.norm(b,ord=1, axis=0)
-    print(b)
-    print(c)
-
-    d = b/c
-    print(d)
-    '''
 
     problem_u = eval(target_problems[2])
     problem_l = eval(target_problems[3])
@@ -3007,20 +3222,43 @@ if __name__ == "__main__":
     np.set_printoptions(precision=16)
     xu = np.atleast_2d([-1.2136516906077681, -1.228916217819073])
     xl = np.atleast_2d([-1.8197992672355463, -1.7274253188436908, 1.5608265570618167])
-    # fu, gu = problem_u.evaluate(np.hstack((xu, xl)), return_values_of=['F', 'G'])
-    # g = problem_l.evaluate(np.hstack((xu, xl)), return_values_of=['G'])
-    # print(f)
-    # print(g)
 
+    eim_l = EI.EIM(problem_l.n_levelvar, n_obj=1, n_constr=0,
+                   upper_bound=problem_l.xu,
+                   lower_bound=problem_l.xl)
+    complete_x_u = np.atleast_2d([0, 0])
+    complete_y_u = np.atleast_2d([120])
+    complete_c_u = np.atleast_2d([-1, -1])
+    feasible_check = [True]
 
+    # parameter needed for upper level local search
+    bi_para = \
+        {'search_iter': 20,
+         'n_samples': 30,
+         'problem': problem_l,
+         'level': 'lower',
+         'eim': eim_l,
+         'eim_pop': 100,
+         'eim_gen': 100,
+         'seed_index': 0,
+         'enable_crossvalidation': False,
+         'method_selection': 'eim'}
+
+    IPsearch_on_trueEvaluation(xu, 100, 'lower', None, problem_u, 'eim',
+                               complete_x_u,
+                               complete_y_u,
+                               complete_c_u,
+                               feasible_check,
+                               **bi_para)
+    # IPsearch_on_trueEvaluation(xl, 100, 'lower', xu, problem_l, 'eim')
 
     # xl = np.atleast_2d([-3.977216235870402,  -2.533006647477677,  -0.9727335525247666])
-    localsearch_x, localsearch_f, success, n_fev, _, _, _, _ = \
-         localsearch_on_trueEvaluation(xl, 100, 'lower', xu, problem_l, 'slsqp', None, None, None, None)
-    print(success)
-    print(localsearch_x)
-    g = problem_l.evaluate(np.hstack((xu, np.atleast_2d(localsearch_x))), return_values_of=['G'])
-    print(g)
+    # localsearch_x, localsearch_f, success, n_fev, _, _, _, _ = \
+    #      localsearch_on_trueEvaluation(xl, 100, 'lower', xu, problem_l, 'slsqp', None, None, None, None)
+    # print(success)
+    # print(localsearch_x)
+    # g = problem_l.evaluate(np.hstack((xu, np.atleast_2d(localsearch_x))), return_values_of=['G'])
+    # print(g)
 
 
 

@@ -3,7 +3,7 @@ from create_child import create_child, create_child_c
 from sort_population import sort_population
 import time
 from scipy.optimize import differential_evolution
-from bilevel_utility import bi_level_compensate
+# from bilevel_utility import bi_level_compensate
 
 
 def optimizer(problem, nobj, ncon, bounds, recordFlag, pop_test, mut, crossp, popsize, its,  **kwargs):

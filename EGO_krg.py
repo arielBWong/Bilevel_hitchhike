@@ -1444,9 +1444,9 @@ def main_bi_mo(seed_index, target_problem, enable_crossvalidation, method_select
     #-----------start of initialization-----
     # ----------------
     i = 0
+    print('init')
     for xu in train_x_u:
-        if i == 20:
-            a = 0
+        print(xu)
         matching_x, matching_f, n_fev_local, feasible_flag = \
             search_for_matching_otherlevel_x(xu,
                                              lower_interation,
@@ -1671,8 +1671,8 @@ def main_bi_mo(seed_index, target_problem, enable_crossvalidation, method_select
             best_complete_x = np.atleast_2d(complete_x_u_feas[min_fu_index, :])
             fl = target_problem_l.evaluate(best_complete_x, return_values_of=["F"])
 
-            save_before_reevaluation(target_problem_u, target_problem_l, best_xu_sofar, matching_xl, fu, fl, seed_index,
-                                     method_selection, folder)
+            # save_before_reevaluation(target_problem_u, target_problem_l, best_xu_sofar, matching_xl, fu, fl, seed_index,
+                                     # method_selection, folder)
         else:  # process situation where no feasible solutions
             print('no feasible solution found on upper level')
             # nofeasible_select(constr_c, train_y, train_x):
@@ -1683,8 +1683,8 @@ def main_bi_mo(seed_index, target_problem, enable_crossvalidation, method_select
             fl = target_problem_l.evaluate(best_xu_complete, return_values_of=["F"])
             fu = fu[0, 0]
             fl = fl[0, 0]
-            save_before_reevaluation(target_problem_u, target_problem_l, best_xu_sofar, matching_xl, fu, fl, seed_index,
-                                     method_selection, folder)
+            # save_before_reevaluation(target_problem_u, target_problem_l, best_xu_sofar, matching_xl, fu, fl, seed_index,
+                                     # method_selection, folder)
     else:  # process for uncontraint problems
         best_solution_index = np.argmin(complete_y_u)
         best_xu_sofar = complete_x_u[best_solution_index, 0:target_problem_u.n_levelvar]
@@ -1712,6 +1712,7 @@ def main_bi_mo(seed_index, target_problem, enable_crossvalidation, method_select
                                          20,
                                          50)
     ll_nfev += local_fev
+    ll_nfev += complete_x_u.shape[0]
     feasible_check = np.append(feasible_check, feasible_flag)
 
     new_complete_x = np.hstack((np.atleast_2d(best_xu_sofar), np.atleast_2d(localsearch_xl)))
@@ -1807,19 +1808,19 @@ if __name__ == "__main__":
     alg_settings = hyp['alg_settings']
 
 
-    para_run = False
+    para_run = True
     if para_run:
         seed_max = 5
         args = paral_args_bi(target_problems, seed_max, False, methods_ops, alg_settings)
         # args = paral_args_temp(target_problems, seed_max, False, methods_ops, alg_settings)
-        num_workers = 1
+        num_workers = 6
         pool = mp.Pool(processes=num_workers)
         pool.starmap(main_bi_mo, ([arg for arg in args]))
     else:
         # seedlist =
         # [2, 0, 5, 1, 8, 6, 5, 6, 4, 1, 9]
-        i = 2
-        main_bi_mo(0, target_problems[i:i+2], False, 'eim', alg_settings)
+        i = 0
+        main_bi_mo(1, target_problems[i:i+2], False, 'eim', alg_settings)
 
 
 
