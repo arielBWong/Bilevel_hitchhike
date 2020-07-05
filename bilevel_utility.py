@@ -273,6 +273,147 @@ def search_for_matching_otherlevel_x(x_other, search_iter, n_samples, problem, l
     return return_tuple[0], return_tuple[1], return_tuple[2], return_tuple[3]
 
 
+
+
+def search_for_matching_otherlevel_x_beta01(x_other, search_iter, n_samples, problem, level, eim, eim_pop, eim_gen,  seed_index, enable_crossvalidation, method_selection, **kwargs):
+# this beta01 version use sqp built in optimization
+#
+    np.set_printoptions(precision=16)
+    # for testing SMD problem;
+    D = problem.n_levelvar
+    n_samples = 11 * D - 1
+
+    train_x, train_y, cons_y = init_xy(n_samples, problem, seed_index,
+                                             **{'problem_type': 'bilevel'})
+
+    num_l = train_x.shape[0]
+    # print(train_x[0, :])
+    x_other = np.atleast_2d(x_other)
+    xother_expand = np.repeat(x_other, num_l, axis=0)
+    if level == 'lower':
+        complete_x = np.hstack((xother_expand, train_x))
+    else:
+        complete_x = np.hstack((train_x, xother_expand))
+
+    if problem.n_constr > 0:
+        # print("constraint settings")
+        complete_y, complete_c = problem.evaluate(complete_x, return_values_of=["F", "G"])
+
+    else:
+        complete_y = problem.evaluate(complete_x, return_values_of=["F"])
+        complete_c = None
+
+    for i in range(search_iter):
+        new_x, _, _ = \
+            surrogate_search_for_nextx(
+                train_x,
+                complete_y,
+                complete_c,
+                eim,
+                eim_pop,
+                eim_gen,
+                method_selection,
+                enable_crossvalidation)
+        # true evaluation to get y
+        # add new x-y to training data and repeat
+
+        train_x = np.vstack((train_x, new_x))
+        if level == 'lower':
+            complete_new_x = np.hstack((x_other, new_x))
+        else:
+            complete_new_x = np.hstack((new_x, x_other))
+
+        # include evaluated cons and f
+        if problem.n_constr > 0:
+            # print('constraints setting')
+            complete_new_y, complete_new_c = problem.evaluate(complete_new_x, return_values_of=["F", "G"])
+            complete_c = np.vstack((complete_c, complete_new_c))
+        else:
+            complete_new_y = problem.evaluate(complete_new_x, return_values_of=["F"])
+        complete_y = np.vstack((complete_y, complete_new_y))
+
+    # after ego, decide where to start local search
+    if problem.n_constr > 0:
+        # print('constr process')
+        complete_y_feasible, train_x_feasible = return_feasible(complete_c, complete_y, train_x)
+        if len(complete_y_feasible) > 0:
+            # print('lower ego success to find feasible xl/fl for local search starting point is:')
+            complete_y = complete_y_feasible
+            train_x = train_x_feasible
+            best_y_index = np.argmin(complete_y)
+            best_x = train_x[best_y_index, :]
+            best_x = np.atleast_2d(best_x)
+            best_y = np.min(complete_y)
+        else:
+            # print("lower ego fail to find feasible, local search start with x: ")
+            best_x, best_y = nofeasible_select(complete_c, complete_y, train_x)
+    else:
+        best_y_index = np.argmin(complete_y)
+        best_x = train_x[best_y_index, :]
+        best_x = np.atleast_2d(best_x)
+        best_y = np.min(complete_y)
+
+    # conduct local search with true evaluation
+    # print('from matching search...returned local search')
+    # print('adding preprocessing, if starting point is too close to  bound move inwards...')
+    best_x = boundary_closeness_check(best_x, problem.xu, problem.xl)
+
+
+    localsearch_x, localsearch_f, success, n_fev, _, _, _, _ = \
+         localsearch_on_trueEvaluation(best_x, 100, level, x_other, problem, 'slsqp', None, None, None, None)
+
+
+    n_fev = n_fev + search_iter + n_samples
+
+
+    # decide which x is returned
+    if problem.n_constr > 0:
+        # check feasibility of local search
+        if level == 'lower':
+            c = problem.evaluate(np.hstack((x_other, np.atleast_2d(localsearch_x))), return_values_of=["G"])
+        else:
+            c = problem.evaluate(np.hstack((np.atleast_2d(localsearch_x), x_other)), return_values_of=["G"])
+        # print('local search return constraint:')
+        # print(c)
+        c[np.abs(c) < 1e-8] = 0
+
+        # surrogate found feasible, consider local returns feasible
+        # decide on smaller f value
+        if len(complete_y_feasible) > 0:
+            if np.any(c > 0):   # surrogate has feasible, local search has no
+                # print('surrogate returns feasible, but local search not, return surrogate results')
+                # print('surrogate constraint output is:')
+                sc = problem.evaluate(np.hstack((x_other, np.atleast_2d(best_x))), return_values_of=["G"])
+                # print(sc)
+                return_tuple = (np.atleast_2d(best_x), np.atleast_2d(best_y), n_fev, True)
+            else:
+                # print('both surrogate and local search returns feasible, return smaller one')
+                feasible_flag = True
+                return_tuple = (localsearch_x, localsearch_f, n_fev, feasible_flag) \
+                    if localsearch_f < best_y \
+                    else (np.atleast_2d(best_x), np.atleast_2d(best_y), n_fev, feasible_flag)
+        # surrogate did not find any feasible solutions
+        # decide (1) local search has feasible return local results
+        # (2) local search has no feasible, flag infeasible, return whatever xl fl
+        else:
+            # localsearch also finds no feasible
+            # only  flag matters, as this solution on upper level will be ignored or set 1e6
+            if np.any(c > 0):
+                # print('local search also has no feasible solution, return false flag')
+                feasible_flag = False
+                return_tuple = (localsearch_x, localsearch_f, n_fev, feasible_flag)
+            else:  # local search found feasible while surrogate did not
+                # print('local search found feasible while surrogate did not')
+                return_tuple = (localsearch_x, localsearch_f, n_fev, True)
+    # no-constraint problem process
+    else:
+        return_tuple = (localsearch_x, localsearch_f, n_fev, True) \
+            if localsearch_f < best_y \
+            else (np.atleast_2d(best_x), np.atleast_2d(best_y), n_fev, True)
+
+    return return_tuple[0], return_tuple[1], return_tuple[2], return_tuple[3]
+
+
 def boundary_closeness_check(x, bound_u, bound_l):
     # this function checks with whether x is too close to bounds
     # if any of them is too close to boundaries, then change them a bit
@@ -530,6 +671,41 @@ def bilevel_localsearch(target_problem_u, complete_x_u, complete_y_u, complete_c
     return new_xu, n_fev_local, feasible_check, complete_x_u, complete_y_u, complete_c_u
 
 
+def bilevel_localsearch_beta01(target_problem_u, complete_x_u, complete_y_u, complete_c_u, feasible_check, **bi_para):
+    # this beta version save the original local search with sqp
+    # this method is designed to include steps of running a local search on upper level varible
+    # it selects the current best xu, and run a local search from this xu
+    best_xu, best_fu = ankor_selection(complete_x_u, complete_y_u, complete_c_u, target_problem_u)
+    best_xu_sofar = np.atleast_2d(best_xu)
+    print('starting point')
+    print(best_xu)
+    print('starting fu')
+    print(best_fu)
+
+
+    new_xu, new_fu, success, n_fev_local, feasible_check, complete_x_u, complete_y_u, complete_c_u = \
+        localsearch_on_trueEvaluation(best_xu_sofar,
+                                      20,
+                                      'upper',
+                                      None,
+                                      target_problem_u,
+                                      'slsqp',
+                                      complete_x_u,
+                                      complete_y_u,
+                                      complete_c_u,
+                                      feasible_check,
+                                      **bi_para)
+
+
+
+    print('end point is :')
+    print(new_xu)
+    print('end point fu is: ')
+    print(new_fu)
+    return new_xu, n_fev_local, feasible_check, complete_x_u, complete_y_u, complete_c_u
+
+
+
 def IPsearch_on_trueEvaluation(ankor_x, max_eval, level_s, other_x, true_problem, method,  #  **bi_para):
                                   complete_x_u,     # include existing samples for bilevel local search
                                   complete_y_u,     # include existing samples for bilevel local search
@@ -570,39 +746,60 @@ def IPsearch_on_trueEvaluation(ankor_x, max_eval, level_s, other_x, true_problem
     class localproblem(object):
         def __init__(self):
             self.nfev = 0  # local used in single level local search
+            # following initialization is to use vstack
             self.unique_xus = np.atleast_2d([lb0 - 1] * n_combo)  # this variable is used to reduce local search
             self.unique_xls = np.atleast_2d([lb0 - 1] * n_var)   # this variable only used in single level local search
             self.single_f = np.atleast_2d([1e8]*n_obj)  # only for matching the first row of other unique xus xls
             pass
 
         def check_matchingxl(self, x):
-            # if two x are identical in 16 digits, consider themg same value
+            # if two x are identical in 16 digits, consider them same value
+            # for bilevel local search
+            # return xl
             x = check_array(x)
             xu_searched = copy.deepcopy(self.unique_xus[:, 0:n_var])
             xu_searched = np.around(xu_searched, 16)
             xu_check = copy.deepcopy(x)
             xu_check = np.around(xu_check, 16)
             xl = None
+            '''
             n = self.unique_xus.shape[0]
             for i in range(n):
                 if len(np.unique(np.vstack((xu_check, xu_searched[i, :])), axis=0)) == 1:
                     xl = self.unique_xus[i, n_var:]
                     break
+            '''
+            diff = xu_searched - xu_check
+            diff = np.sum(diff, 2)
+            diff = diff.flatten()
+            xl_index = np.nonzero(diff == 0)
+            if len(xl_index[0]) == 1:
+                xl = self.unique_xus[xl_index[0][0], n_var:]
             return xl
 
         def check_matchingx(self, x):
-            # if two x are identical in 16 digits, consider themg same value
+            # if two x are identical in 16 digits, consider them same value
+            # for single level local search
+            # return f
             x = check_array(x)
             x_searched = copy.deepcopy(self.unique_xls)
             x_searched = np.around(x_searched, 16)
             x_check = copy.deepcopy(x)
             x_check = np.around(x_check, 16)
-            n = self.unique_xls.shape[0]
+            # n = self.unique_xls.shape[0]
             f = None
+            '''
             for i in range(n):
                 if len(np.unique(np.vstack((x_check, x_searched[i, :])), axis=0)) == 1:
                     f = self.single_f[i, :]
                     break
+            '''
+            diff = x_searched - x_check
+            diff = np.sum(diff, 2)
+            diff = diff.flatten()
+            x_index = np.nonzero(diff == 0)
+            if len(x_index[0]) == 1:
+                f = self.single_f[x_index[0][0], :]
             return f
 
 
@@ -658,7 +855,6 @@ def IPsearch_on_trueEvaluation(ankor_x, max_eval, level_s, other_x, true_problem
             return np.array(f)
 
         def constraints(self, x):
-            nonlocal  bi_matching_x
 
             x = np.atleast_2d(x)
             if other_x is not None:  # means single level optimization
@@ -1227,6 +1423,90 @@ def dynamic_close_point_elimination(train_x_org, train_y_org, train_c_org, measu
 
 def surrogate_search_for_nextx(train_x_orig, train_y_orig, train_c_orig, eim, eim_pop, eim_gen, method_selection, enable_crossvalidation):
 
+    #------ old version on fixed elimination-----------
+    # train_x, train_y, train_c = close_point_elimination(train_x_orig, train_y_orig, train_c_orig, 2)
+    train_x = train_x_orig
+    train_y = train_y_orig
+    train_c = train_c_orig
+    train_x_norm, x_mean, x_std = norm_by_zscore(train_x)
+    train_y_norm, y_mean, y_std = norm_by_zscore(train_y)
+
+    train_x_norm = np.atleast_2d(train_x_norm)
+    train_y_norm = np.atleast_2d(train_y_norm)
+
+    if train_c is not None:
+        train_c_norm, c_mean, c_std = norm_by_zscore(train_c)
+        train_c_norm = np.atleast_2d(train_c_norm)
+    else:
+        train_c_norm = None
+
+    krg, krg_g = cross_val_krg(train_x_norm, train_y_norm, train_c_norm, enable_crossvalidation)
+    # -----------old version on fixed elimination------------
+
+
+    '''
+    #---- dynamic process determine which distance to use ---------
+    krg, krg_g, d_index = \
+       dynamic_close_point_elimination(train_x_orig, train_y_orig, train_c_orig, [1, 2, 3])
+    train_x, train_y, train_c = close_point_elimination(train_x_orig, train_y_orig, train_c_orig, d_index+1)
+
+    train_x_norm, x_mean, x_std = norm_by_zscore(train_x)
+    train_y_norm, y_mean, y_std = norm_by_zscore(train_y)
+    # print('recreated x mean ')
+    # print(x_mean)
+    # print('\n')
+
+    train_x_norm = np.atleast_2d(train_x_norm)
+    train_y_norm = np.atleast_2d(train_y_norm)
+
+    if train_c is not None:
+        train_c_norm, c_mean, c_std = norm_by_zscore(train_c)
+        train_c_norm = np.atleast_2d(train_c_norm)
+    else:
+        train_c_norm = None
+    #---------  dynamic process determine which distance to use ---------
+    '''
+
+
+    xbound_l = convert_with_zscore(eim.xl, x_mean, x_std)
+    xbound_u = convert_with_zscore(eim.xu, x_mean, x_std)
+    x_bounds = np.vstack((xbound_l, xbound_u)).T.tolist()  # for ea, column direction
+
+    # construct feasible for dict: para
+    if train_c is not None:
+        feasible_norm, _ = return_feasible(train_c, train_y_norm, train_x_norm)
+    else:
+        feasible_norm = np.array([])
+
+    para = {'train_y': train_y,
+            'norm_train_y': train_y_norm,
+            'krg': krg,
+            'krg_g': krg_g,
+            'nadir': None,
+            'ideal': None,
+            'feasible': np.array(feasible_norm),
+            'ei_method': method_selection}
+
+    recordFlag = False
+    pop_x, pop_f = optimizer_EI.optimizer_DE(eim,
+                                             eim.n_obj,
+                                             eim.n_constr,
+                                             x_bounds,
+                                             recordFlag,
+                                             pop_test=False,
+                                             F=0.7,
+                                             CR=0.9,
+                                             NP=eim_pop,
+                                             itermax=eim_gen,
+                                             flag=False,
+                                             **para)
+    pop_x = reverse_with_zscore(pop_x, x_mean, x_std)
+    return pop_x, krg, krg_g
+
+
+def surrogate_search_for_nextx_beta01(train_x_orig, train_y_orig, train_c_orig, eim, eim_pop, eim_gen, method_selection, enable_crossvalidation):
+    # this version has a bug on constraints, that it should not normalise constraint data
+    # this beta01 version also use scipy build in slsqp for local search
     #------ old version on fixed elimination-----------
     train_x, train_y, train_c = close_point_elimination(train_x_orig, train_y_orig, train_c_orig, 2)
     # train_x = train_x_orig
@@ -2310,21 +2590,23 @@ def SMD_investigate_kriging(problem_u, problem_l, seed):
     print('before rebuild number of data: %d' % m)
 
     #-----fixed distance elimination
-    # train_x, train_y, train_c = close_point_elimination(train_x, train_y, train_c)
-    # n = train_x.shape[0]
-    # print('after close elimination, number of data: %d' % n)
+    # train_x, train_y, train_c = close_point_elimination(train_x, train_y, train_c, 1)
+    n = train_x.shape[0]
+    print('after close elimination, number of data: %d' % n)
 
     # apply kriging
-    # krg, krg_g = krg_training(train_x, train_y, None)
+    krg, krg_g = krg_training(train_x, train_y, None)
     #-------fixed distance elimination
 
-    # use dynamically determined krg
-    krg, krg_g, d_index = \
-        dynamic_close_point_elimination(train_x, train_y, train_c, [1, 2, 3])
+    # ---use dynamically determined krg
+    # krg, krg_g, d_index = \
+        # dynamic_close_point_elimination(train_x, train_y, train_c, [1, 2, 3])
 
-    print(d_index)
+    # print(d_index)
 
-    train_x, train_y, train_c = close_point_elimination(train_x, train_y, train_c, d_index + 1)
+    # train_x, train_y, train_c = close_point_elimination(train_x, train_y, train_c, d_index + 1)
+    # ---use dynamically determined krg
+
     pred_y = trained_model_prediction(krg[0], train_x, train_y, test_xu, problem_u.n_levelvar)
 
 
@@ -2395,8 +2677,8 @@ def SMD_investigate_kriging(problem_u, problem_l, seed):
     zlim = ax2.get_zlim()
     ax2.scatter(train_x[:, 0], train_x[:, 1], zs=zlim[0], zdir='z', c='r', marker='X')
 
-    t = 'kriging rebuild with EGO search, ' + str(d_index + 1) + ' closeness selected'
-    ax2.set_title(t)
+    # t = 'kriging rebuild with EGO search, ' + str(d_index + 1) + ' closeness selected'
+    # ax2.set_title(t)
     fig.colorbar(cl2, ax=ax2)
     plt.show()
 
@@ -3216,8 +3498,20 @@ if __name__ == "__main__":
     np.random.seed(seed)
 
 
-    problem_u = eval(target_problems[2])
-    problem_l = eval(target_problems[3])
+    problem_u = eval(target_problems[0])
+    problem_l = eval(target_problems[1])
+
+    SMD_investigate_kriging(problem_u, problem_l, seed)
+
+    # SMD_invest_visualisation(problem_u, problem_l, seed)
+    # SMD_investigate_kriging(problem_u, problem_l, seed)
+    # SMD_distance_measure_compare(problem_u)
+
+
+
+
+
+    '''
     # test_cross_val(problem_l)
     np.set_printoptions(precision=16)
     xu = np.atleast_2d([-1.2136516906077681, -1.228916217819073])
@@ -3260,7 +3554,7 @@ if __name__ == "__main__":
     # g = problem_l.evaluate(np.hstack((xu, np.atleast_2d(localsearch_x))), return_values_of=['G'])
     # print(g)
 
-
+    '''
 
     '''
     best_xu_sofar = xu

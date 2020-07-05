@@ -28,7 +28,8 @@ from bilevel_utility import surrogate_search_for_nextx, save_converge_plot,\
     hybridsearch_on_trueEvaluation, nofeasible_select, feasibility_adjustment_2,\
     save_feasibility,  feasibility_adjustment, saveEGOtraining, saveKRGmodel,\
     feasibility_adjustment_3_dynamic, trained_model_prediction, localsearch_on_trueEvaluation,\
-    bilevel_localsearch, uplevel_localsearch_visual, close_point_elimination
+    bilevel_localsearch, uplevel_localsearch_visual, close_point_elimination, search_for_matching_otherlevel_x_beta01,\
+    bilevel_localsearch_beta01
 
 
 def return_current_extreme(train_x, train_y):
@@ -1752,6 +1753,358 @@ def main_bi_mo(seed_index, target_problem, enable_crossvalidation, method_select
 
     return None
 
+def main_bi_mo_beta01(seed_index, target_problem, enable_crossvalidation, method_selection, exp_settings):
+    # this following one line is for work around 1d plot in multiple-processing settings
+    mp.freeze_support()
+    np.random.seed(seed_index)
+    plt.ion()
+    target_problem_u = eval(target_problem[0])
+    target_problem_l = eval(target_problem[1])
+    print('Problem %s, seed %d' % (target_problem_u.name(), seed_index))
+    print('Problem %s, seed %d' % (target_problem_l.name(), seed_index))
+
+    n_vals = target_problem_u.n_levelvar
+    number_of_initial_samples = 11 * n_vals - 1
+    # number_of_initial_samples = exp_settings['number_of_initial_samples']
+    n_iter = 10000  # stopping criterion set
+    converge_track = []
+    folder = exp_settings['folder']
+    lower_interation = exp_settings['lower_interaction']
+    stop = exp_settings['stop']
+    ll_nfev = 0
+    start = time.time()
+
+    # init upper level variables, bilevel only init xu no evaluation is done
+    train_x_u, train_y_u, cons_y_u = init_xy(number_of_initial_samples, target_problem_u, seed_index, **{'problem_type':'bilevel'})
+
+
+    # test purpose for validation only
+    # train_x_u = np.atleast_2d([0] * target_problem_u.n_levelvar)
+    # train_x_u = np.repeat(train_x_u, number_of_initial_samples, axis=0)
+
+    eim_l = EI.EIM(target_problem_l.n_levelvar, n_obj=1, n_constr=0,
+                   upper_bound=target_problem_l.xu,
+                   lower_bound=target_problem_l.xl)
+
+    # for each upper level variable, search for its corresponding lower variable for compensation
+    num_pop = exp_settings['num_pop']
+    num_gen = exp_settings['num_gen']
+
+    # record matching f
+    matching_xl = []
+    feasible_check = []
+
+    #-----------start of initialization-----
+    # ----------------
+    i = 0
+    print('init')
+    for xu in train_x_u:
+        print(xu)
+        matching_x, matching_f, n_fev_local, feasible_flag = \
+            search_for_matching_otherlevel_x_beta01(xu,
+                                             lower_interation,
+                                             number_of_initial_samples,
+                                             target_problem_l,
+                                             'lower',
+                                             eim_l,
+                                             num_pop,
+                                             num_gen,
+                                             seed_index,
+                                             enable_crossvalidation,
+                                             method_selection)
+
+        # used to signal which combined x should have post process
+        feasible_check = np.append(feasible_check, feasible_flag)
+        ll_nfev += n_fev_local
+        matching_xl = np.append(matching_xl, matching_x)
+        i = i + 1
+
+    # arrange xl into 2d form for combination
+    matching_xl = np.atleast_2d(matching_xl).reshape(-1, target_problem_l.n_levelvar)
+    complete_x_u = np.hstack((train_x_u, matching_xl))
+
+    # consider constraint in true evaluation
+    if target_problem_u.n_constr > 0:
+        complete_y_u, complete_c_u = target_problem_u.evaluate(complete_x_u, return_values_of=["F", "G"])
+    else:
+        complete_y_u = target_problem_u.evaluate(complete_x_u, return_values_of=["F"])
+        complete_c_u = None
+
+    # infeasibility process 1: delete 2: set high value 3: dynamically high value
+    complete_y_u = \
+        feasibility_adjustment_3_dynamic(complete_y_u, feasible_check)
+
+    # sad adjustment of changes introduced by function feasibility_adjustment
+    if target_problem_u.n_constr == 0:
+        complete_c_u = None
+
+    #--------------------- end of initialization ---------------------
+
+    # create upper level eim search problem
+    eim_u = EI.EIM(target_problem_u.n_levelvar, n_obj=1, n_constr=0,
+                   upper_bound=target_problem_u.xu,
+                   lower_bound=target_problem_u.xl)
+
+    # before entering ego iteration, prepare next xu
+    searched_xu, krg, krg_g = \
+        surrogate_search_for_nextx(train_x_u,
+                                   complete_y_u,  # bad naming
+                                   complete_c_u,  # again bad naming
+                                   eim_u,
+                                   num_pop,
+                                   num_gen,
+                                   method_selection,
+                                   enable_crossvalidation)
+
+    # parameter needed for upper level local search
+    bi_para = \
+        {'search_iter': lower_interation,
+         'n_samples': number_of_initial_samples,
+         'problem': target_problem_l,
+         'level': 'lower',
+         'eim': eim_l,
+         'eim_pop': num_pop,
+         'eim_gen': num_gen,
+         'seed_index': seed_index,
+         'enable_crossvalidation': enable_crossvalidation,
+         'method_selection': method_selection}
+
+
+
+    # ------------ upper level EGO iterations ----------------
+    # find lower level problem complete for this new pop_x
+    for i in range(n_iter):
+        print('iteration %d' % i)
+        matching_xl, matching_fl, n_fev_local, feasible_flag = \
+            search_for_matching_otherlevel_x_beta01(searched_xu,
+                                             lower_interation,
+                                             number_of_initial_samples,
+                                             target_problem_l,
+                                             'lower',
+                                             eim_l,
+                                             num_pop,
+                                             num_gen,
+                                             seed_index,
+                                             enable_crossvalidation,
+                                             method_selection)
+
+        ll_nfev += n_fev_local
+
+        # combine matching xl to xu for true evaluation
+        matching_xl = np.atleast_2d(matching_xl)
+        new_complete_xu = np.hstack((searched_xu, matching_xl))
+
+        if target_problem_u.n_constr > 0:
+            new_complete_yu, new_complete_cu = target_problem_u.evaluate(new_complete_xu, return_values_of=["F", "G"])
+        else:
+            new_complete_yu = target_problem_u.evaluate(new_complete_xu, return_values_of=["F"])
+            new_complete_cu = None
+        print('iteration %d, yu true evaluated: %f' % (i, new_complete_yu))
+
+        # print('each iteration upper x-y')
+        # test_all = np.hstack((new_complete_xu, new_complete_yu))
+
+        # double check with feasibility returned from other level
+        feasible_check = np.append(feasible_check, feasible_flag)
+
+        # adding new xu yu to training
+        train_x_u = np.vstack((train_x_u, searched_xu))
+        complete_x_u = np.vstack((complete_x_u, new_complete_xu))
+        complete_y_u = np.vstack((complete_y_u, new_complete_yu))
+        if target_problem_u.n_constr > 0:
+            complete_c_u = np.vstack((complete_c_u, new_complete_cu))
+
+        # after adding new sample
+        # follow an adjust on feasibility
+        complete_y_u = \
+            feasibility_adjustment_3_dynamic(complete_y_u, feasible_check)
+
+        # sad adjustment of changes introduced by function feasibility_adjustment
+        if target_problem_u.n_constr == 0:
+            complete_c_u = None
+
+        # parameter for upper level local search
+        n_before_ls = complete_x_u.shape[0] - 1  # at this stage, new variable is added
+
+        if i > stop - number_of_initial_samples - 1:
+            # test_x = np.atleast_2d(train_x_u[0:-1, :]).reshape(-1, 2)
+            # test_y = np.atleast_2d(complete_y_u[0:-1, :]).reshape(-1, 1)
+            # trained_model_prediction(krg[0], test_x, test_y, test_x, target_problem_u.n_levelvar)
+
+            break
+        # if ll_nfev > 15000:
+           # break
+
+        # if evaluation limit is not reached, search for next xu
+        # z = train_x_u.shape[0]
+        # print('before upper level ego train size: %d' % z)
+        searched_xu, krg, krg_g = \
+            surrogate_search_for_nextx(train_x_u,
+                                       complete_y_u,  # should be train_y_u, bad names
+                                       complete_c_u,  # should be train_c_u, bad naming
+                                       eim_u,
+                                       num_pop,
+                                       num_gen,
+                                       method_selection,
+                                       enable_crossvalidation)
+
+        # trained_model_prediction(krg[0], train_x_u, complete_y_u, train_x_u, target_problem_u.n_levelvar)
+        # xt, yt, zt = close_point_elimination(train_x_u, complete_y_u, complete_c_u)
+
+        # m = train_x_u.shape[0]
+        # n = xt.shape[0]
+        # print('upper level before closeness elimination: %d' % n)
+        # print('upper level after closeness elimination: %d' % m)
+
+        # record convergence
+        converge_track.append(np.min(complete_y_u))
+
+        bu = np.min(complete_y_u)
+        print('iteration %d, yu true evaluated/best so far: %.4f/%.4f ' % (i, new_complete_yu, bu))
+
+
+
+    #----------upper local search -----------------
+    # invoke after upper level surrogate
+    # local search on upper level
+    # select best feasible xu and run a local search on it
+    # question: (how) do we include all the truely evaluated xu in EGO?
+    # current code include all the truely evaluated xu in EGO, needs test
+    # print('bilevel local search on upper')
+    new_local_xu, n_fev_local, feasible_check, complete_x_u, complete_y_u, complete_c_u = \
+        bilevel_localsearch_beta01(target_problem_u,
+                                   complete_x_u,
+                                   complete_y_u,
+                                   complete_c_u,
+                                   feasible_check,  # feasible_check is flag list for lower level variables
+                                    **bi_para)
+    print('new xu')
+    ll_nfev += n_fev_local
+    # adjust train_x_u when local se    arch add more samples
+    # potential question, local search bring xu too close to each other?
+    train_x_u = np.atleast_2d(complete_x_u[:, 0:target_problem_u.n_levelvar])
+
+
+    # this next function is only for visualization investigation
+    # not for real optimization
+    # uplevel_localsearch_visual(complete_x_u, complete_y_u, complete_c_u, n_before_ls,
+    #                            krg, krg_g, seed_index, folder, target_problem_u)
+    # ------------end upper local search-------------------------------------
+
+    # save data for later test
+    # EGO training data save
+    saveEGOtraining(complete_x_u, complete_y_u, folder, target_problem_u, feasible_check, seed_index)
+
+    # EGO model save
+    saveKRGmodel(krg, krg_g, folder, target_problem_u, seed_index)
+
+
+
+    # now upper iteration is finished
+    # conduct a local search based on fl
+    # too redundent needs an improvement
+    if target_problem_u.n_constr > 0:
+        # return feasible, no feasible solutions refer to x
+        # but return y first is a bit annoying
+        complete_y_u_feas, complete_x_u_feas = return_feasible(complete_c_u, complete_y_u, complete_x_u)
+        complete_y_u_feas = np.atleast_2d(complete_y_u_feas).reshape(-1, target_problem_u.n_obj)
+        complete_x_u_feas = np.atleast_2d(complete_x_u_feas).reshape(-1, target_problem_u.n_var)
+
+    if target_problem_u.n_constr > 0:
+        if len(complete_y_u_feas) > 0:  # deal with feasible solutions
+            # identify best feasible solution
+            min_fu_index = np.argmin(complete_y_u_feas)
+            # extract xu
+            best_xu_sofar = np.atleast_2d(complete_x_u_feas[min_fu_index, 0:target_problem_u.n_levelvar])
+            # extract xl
+            matching_xl = np.atleast_2d(complete_x_u_feas[min_fu_index, target_problem_u.n_levelvar:])
+            # for save fu
+            fu = complete_y_u_feas[min_fu_index, :]
+            # for save fl
+            best_complete_x = np.atleast_2d(complete_x_u_feas[min_fu_index, :])
+            fl = target_problem_l.evaluate(best_complete_x, return_values_of=["F"])
+
+            # save_before_reevaluation(target_problem_u, target_problem_l, best_xu_sofar, matching_xl, fu, fl, seed_index,
+                                     # method_selection, folder)
+        else:  # process situation where no feasible solutions
+            print('no feasible solution found on upper level')
+            # nofeasible_select(constr_c, train_y, train_x):
+            best_xu_complete, best_yu = nofeasible_select(complete_c_u, complete_y_u, complete_x_u)
+            best_xu_sofar = best_xu_complete[0, 0:target_problem_u.n_levelvar]
+            matching_xl = best_xu_complete[0, target_problem_u.n_levelvar:]
+            fu = best_yu
+            fl = target_problem_l.evaluate(best_xu_complete, return_values_of=["F"])
+            fu = fu[0, 0]
+            fl = fl[0, 0]
+            # save_before_reevaluation(target_problem_u, target_problem_l, best_xu_sofar, matching_xl, fu, fl, seed_index,
+                                     # method_selection, folder)
+    else:  # process for uncontraint problems
+        best_solution_index = np.argmin(complete_y_u)
+        best_xu_sofar = complete_x_u[best_solution_index, 0:target_problem_u.n_levelvar]
+        matching_xl = complete_x_u[best_solution_index, target_problem_u.n_levelvar:]
+        best_xu_sofar = np.atleast_2d(best_xu_sofar)
+        matching_xl = np.atleast_2d(matching_xl)
+        # for save fu
+        fu = complete_y_u[best_solution_index, :]
+        # for save fl
+        best_complete_x = np.atleast_2d(complete_x_u[best_solution_index, :])
+        fl = target_problem_l.evaluate(best_complete_x, return_values_of=["F"])
+        save_before_reevaluation(target_problem_u, target_problem_l, best_xu_sofar, matching_xl, fu, fl, seed_index,
+                                 method_selection, folder)
+
+    print('before re-evaluation: fu')
+    print(fu)
+    print('before re-evaluation: fl')
+    print(fl)
+    # conduct a final local search based on best_xu_sofar
+    localsearch_xl, localsearch_fl, local_fev, feasible_flag \
+        = hybridsearch_on_trueEvaluation(matching_xl,
+                                         'lower',
+                                         best_xu_sofar,
+                                         target_problem_l,
+                                         20,
+                                         50)
+    ll_nfev += local_fev
+    ll_nfev += complete_x_u.shape[0]
+    feasible_check = np.append(feasible_check, feasible_flag)
+
+    new_complete_x = np.hstack((np.atleast_2d(best_xu_sofar), np.atleast_2d(localsearch_xl)))
+    new_fl = target_problem_l.evaluate(new_complete_x, return_values_of=["F"])
+    new_fu = target_problem_u.evaluate(new_complete_x, return_values_of=["F"])
+    converge_track.append(new_fu[0, 0])
+    print('final upper f')
+    print(new_fu)
+    print('final lower f')
+    print(new_fl)
+
+    end = time.time()
+    duration = (end - start) / 60
+    print('overall time used: %0.4f mins' % duration)
+
+    # save feasibility only for constraint problems
+    if target_problem_u.n_constr > 0:
+        upper_c = target_problem_u.evaluate(new_complete_x, return_values_of=["G"])
+        up_feas = 0 if np.any(upper_c > 0) else 1
+    else:
+        up_feas = 1
+
+    if target_problem_l.n_constr > 0:
+        lower_c = target_problem_l.evaluate(new_complete_x, return_values_of=["G"])
+        low_feas = 0 if np.any(lower_c > 0) else 1
+    else:
+        low_feas = 1
+
+    save_feasibility(target_problem_u, target_problem_l, up_feas, low_feas, seed_index, method_selection, folder)
+
+    final_fu = new_fu[0, 0]
+    final_fl = new_fl[0, 0]
+
+    save_accuracy(target_problem_u, target_problem_l, final_fu, final_fl, seed_index, method_selection, folder)
+    save_converge_plot(converge_track, target_problem_u.name(), method_selection, seed_index, folder)
+    save_function_evaluation(ll_nfev, target_problem_l, seed_index, method_selection, folder)
+
+    return None
+
 
 def paral_args_bi(target_problems, seed_max, cross_val, methods_ops, alg_settings):
     # prepare args for bilevel para processing
@@ -1808,19 +2161,20 @@ if __name__ == "__main__":
     alg_settings = hyp['alg_settings']
 
 
-    para_run = True
+    para_run = False
     if para_run:
         seed_max = 5
         args = paral_args_bi(target_problems, seed_max, False, methods_ops, alg_settings)
         # args = paral_args_temp(target_problems, seed_max, False, methods_ops, alg_settings)
-        num_workers = 6
+        num_workers = 20
         pool = mp.Pool(processes=num_workers)
         pool.starmap(main_bi_mo, ([arg for arg in args]))
     else:
         # seedlist =
         # [2, 0, 5, 1, 8, 6, 5, 6, 4, 1, 9]
         i = 0
-        main_bi_mo(1, target_problems[i:i+2], False, 'eim', alg_settings)
+        # main_bi_mo(1, target_problems[i:i+2], False, 'eim', alg_settings)
+        main_bi_mo_beta01(0, target_problems[i:i + 2], False, 'eim', alg_settings)
 
 
 

@@ -1,12 +1,6 @@
 {
-"BO_target_problems": [ "SMD.SMD9_F(1,1,2)",
-                        "SMD.SMD9_f(1,1,2)",
-                        "SMD.SMD10_F(1,1,2)",
-                        "SMD.SMD10_f(1,1,2)",
-                        "SMD.SMD11_F(1,1,2)",
-                        "SMD.SMD11_f(1,1,2)",
-                        "SMD.SMD12_F(1,1,2)",
-                        "SMD.SMD12_f(1,1,2)"],
+"BO_target_problems": [ "SMD.SMD10_F(1,1,2)",
+                        "SMD.SMD10_f(1,1,2)"],
 "methods_ops": ["eim"],
 "alg_settings": {
                     "lower_interaction": 20,
